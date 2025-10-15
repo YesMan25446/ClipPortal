@@ -123,13 +123,21 @@ class SimpleDatabaseManager {
     if (userIndex === -1) return null;
     
     const now = new Date().toISOString();
-    if (updates.email) {
-      updates.email = encrypt(updates.email.toLowerCase());
+    const updateData = { ...updates };
+    
+    if (updateData.email) {
+      updateData.email = encrypt(updateData.email.toLowerCase());
+    }
+    
+    // Handle isAdmin -> is_admin conversion
+    if (updateData.isAdmin !== undefined) {
+      updateData.is_admin = updateData.isAdmin;
+      delete updateData.isAdmin;
     }
     
     users.users[userIndex] = { 
       ...users.users[userIndex], 
-      ...updates, 
+      ...updateData, 
       updated_at: now 
     };
     
@@ -142,6 +150,16 @@ class SimpleDatabaseManager {
     users.users = users.users.filter(u => u.id !== id);
     this.writeUsers(users);
     return true;
+  }
+
+  getAllUsers(limit = 1000, offset = 0) {
+    const users = this.readUsers();
+    return users.users.slice(offset, offset + limit).map(user => {
+      if (user.email) {
+        user.email = decrypt(user.email);
+      }
+      return user;
+    });
   }
 
   searchUsers(query = '', limit = 50) {
