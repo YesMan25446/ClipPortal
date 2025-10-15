@@ -389,11 +389,10 @@ async function ensureThumbnailsForExistingClips() {
 // Ensure at least one admin exists: if none, promote the first user
 (function ensureAdminUser(){
   try {
-    const users = readUsers();
-    if (users.users.length > 0 && !users.users.some(u => u.isAdmin)) {
-      users.users[0].isAdmin = true;
-      writeUsers(users);
-      console.log(`👑 Promoted initial user '${users.users[0].username}' to admin`);
+    const allUsers = db.getAllUsers();
+    if (allUsers.length > 0 && !allUsers.some(u => u.is_admin)) {
+      db.updateUser(allUsers[0].id, { is_admin: true });
+      console.log(`👑 Promoted initial user '${allUsers[0].username}' to admin`);
     }
   } catch (e) { /* ignore */ }
 })();
@@ -426,6 +425,9 @@ app.post('/api/auth/register', async (req, res) => {
     const passwordHash = bcrypt.hashSync(password, 10);
     const verifyToken = uuidv4();
     
+    // Check if this is the first user to make them admin
+    const isFirstUser = db.getAllUsers().length === 0;
+    
     const userData = {
       id,
       username,
@@ -434,7 +436,7 @@ app.post('/api/auth/register', async (req, res) => {
       isVerified: true, // Skip email verification for easier setup
       verifyToken: null,
       verifyTokenExpires: null,
-      isAdmin: false
+      isAdmin: isFirstUser
     };
     
     // Create user in encrypted database
