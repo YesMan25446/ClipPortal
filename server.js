@@ -722,12 +722,11 @@ app.get('/api/clips', (req, res) => {
 
     // Determine requester admin status
     const uid = optionalAuth(req);
-    const users = readUsers();
-    const me = users.users.find(u => u.id === uid);
-    const isAdmin = !!(me && me.isAdmin);
+    const me = uid ? db.getUserById(uid) : null;
+    const isAdmin = !!(me && me.is_admin);
 
-    // Normalize status for backward compatibility
-    let clips = data.clips.map(c => ({ ...c, status: c.status || 'approved' }));
+    // Don't auto-approve clips without status - preserve them as they are
+    let clips = data.clips.map(c => ({ ...c, status: c.status || 'pending' }));
 
     // Status filtering
     const statusParam = (req.query.status || '').toLowerCase();
@@ -790,12 +789,11 @@ app.get('/api/clips/:id', (req, res) => {
     }
 
     // Access control: only admins can view pending clips
-    const status = clip.status || 'approved';
+    const status = clip.status || 'pending';
     if (status !== 'approved') {
       const uid = optionalAuth(req);
-      const users = readUsers();
-      const me = users.users.find(u => u.id === uid);
-      const isAdmin = !!(me && me.isAdmin);
+      const me = uid ? db.getUserById(uid) : null;
+      const isAdmin = !!(me && me.is_admin);
       if (!isAdmin) return res.status(404).json({ success: false, error: 'Clip not found' });
     }
 
