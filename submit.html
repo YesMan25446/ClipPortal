@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Submit a Clip - Clip Portal</title>
+    <meta name="description" content="Submit your favorite clips to share with the community." />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <h1 class="logo">Clip Portal</h1>
+        <nav class="nav">
+          <a href="index.html">Watch</a>
+          <a href="submit.html" class="active">Submit</a>
+          <a href="about.html">About</a>
+          <a href="messages.html">Messages</a>
+          <a href="account.html">Account</a>
+          <a href="admin.html" class="admin-link">Admin</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      <section id="submit" class="card">
+        <h2>Submit a Clip</h2>
+        <p class="muted">Share a link to your clip or upload a file. Provide a title and short description. Maximum length is <strong>30 seconds</strong>.</p>
+
+        <form id="clipForm" novalidate>
+          <div class="grid">
+            <div class="field">
+              <label for="title">Title<span aria-hidden="true" class="req">*</span></label>
+              <input id="title" name="title" type="text" required maxlength="120" placeholder="e.g., Epic clutch in round 13" />
+              <small class="error" data-for="title"></small>
+            </div>
+
+            <div class="field">
+              <label for="url">Video URL</label>
+              <input id="url" name="url" type="url" inputmode="url" placeholder="https://..." />
+              <small class="hint">YouTube, Twitch, or direct .mp4 links work best.</small>
+              <small class="error" data-for="url"></small>
+            </div>
+
+            <div class="field">
+              <label for="file">Or upload a file</label>
+              <input id="file" name="file" type="file" accept="video/*" />
+              <small class="hint">Max length 30 seconds (files >30s will be rejected). ~100MB recommended.</small>
+              <small class="error" data-for="file"></small>
+            </div>
+
+            <div class="field">
+              <label for="category">Category</label>
+              <select id="category" name="category">
+                <option value="">Select a category</option>
+                <option>Highlights</option>
+                <option>Funny</option>
+                <option>Tutorial</option>
+                <option>Other</option>
+              </select>
+            </div>
+
+            <div class="field span-2">
+              <label for="description">Description</label>
+              <textarea id="description" name="description" rows="4" placeholder="What makes this clip special? Context, players, timestamp…"></textarea>
+              <small class="error" data-for="description"></small>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button type="submit" class="btn primary">Submit Clip</button>
+            <button type="reset" class="btn">Clear</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="guidelines" class="card">
+        <h2>Submission Guidelines</h2>
+        <ul>
+          <li>Include a clear, descriptive title.</li>
+          <li>Prefer links to well-known platforms (YouTube, Twitch).</li>
+          <li>Only upload content you have the right to share.</li>
+          <li>Keep descriptions concise and helpful.</li>
+          <li>Choose the most appropriate category for your clip.</li>
+          <li>Ensure your clip is 30 seconds or less.</li>
+        </ul>
+      </section>
+
+      <section id="recent-submissions" class="card">
+        <h2>Recent Submissions</h2>
+        <div class="recent-clips" id="recentClips">
+          <!-- Recent clips will be loaded dynamically -->
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <small>© <span id="year"></span> Clip Portal</small>
+      </div>
+    </footer>
+
+<script src="./script.js?v=8" defer></script>
+  </body>
+</html>

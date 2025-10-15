@@ -7,3 +7,9 @@ dist/
 .env.*
 .vercel/
 .netlify/
+
+# Clip Portal specific
+data/
+uploads/
+thumbnails/
+*.log

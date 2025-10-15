@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin Panel - Clip Portal</title>
+    <meta name="description" content="Admin panel for managing clips on Clip Portal." />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <h1 class="logo">Clip Portal Admin</h1>
+        <nav class="nav">
+          <a href="index.html">Watch</a>
+          <a href="submit.html">Submit</a>
+          <a href="about.html">About</a>
+          <a href="messages.html">Messages</a>
+          <a href="account.html">Account</a>
+          <a href="admin.html" class="active">Admin</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      <!-- Access Notice -->
+      <section id="loginSection" class="card">
+        <h2>Admin Area</h2>
+        <p class="muted" id="adminAccessMsg">You must be logged in as an admin to access this page.</p>
+        <div class="actions">
+          <a class="btn" href="account.html">Go to Account</a>
+        </div>
+      </section>
+
+      <!-- Admin Panel (Hidden by default) -->
+      <section id="adminPanel" class="card" style="display: none;">
+        <h2>Clip Management</h2>
+        <p class="muted">Manage all clips in the system. Click on a clip to view details and delete.</p>
+        
+        <div class="admin-stats">
+          <div class="stat-item">
+            <span class="stat-label">Total Clips:</span>
+            <span class="stat-value" id="totalClipsCount">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Total Ratings:</span>
+            <span class="stat-value" id="totalRatingsCount">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Average Rating:</span>
+            <span class="stat-value" id="averageRatingValue">0.0</span>
+          </div>
+        </div>
+
+        <div class="admin-filters">
+          <div class="filter-group">
+            <label for="adminCategoryFilter">Category:</label>
+            <select id="adminCategoryFilter">
+              <option value="">All Categories</option>
+              <option value="highlights">Highlights</option>
+              <option value="funny">Funny</option>
+              <option value="tutorial">Tutorial</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="adminSortBy">Sort by:</label>
+            <select id="adminSortBy">
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="rating">Highest Rated</option>
+              <option value="popular">Most Popular</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="adminStatusFilter">Status:</label>
+            <select id="adminStatusFilter">
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="all">All</option>
+            </select>
+          </div>
+          <button id="refreshAdminBtn" class="btn secondary">Refresh</button>
+        </div>
+
+        <div id="adminClipsGrid" class="admin-clips-grid">
+          <!-- Admin clip cards will be loaded here -->
+        </div>
+
+        <div class="admin-actions">
+          <button id="logoutBtn" class="btn secondary">Logout</button>
+        </div>
+
+        <section class="card">
+          <h3>Admin Management</h3>
+          <div class="grid">
+            <div class="field">
+              <label for="adminUserSearch">Find user</label>
+              <input id="adminUserSearch" type="text" placeholder="Search username" />
+            </div>
+            <div class="actions">
+              <button id="adminSearchBtn" class="btn">Search</button>
+            </div>
+          </div>
+          <div id="adminUsersResults" class="recent-clips"></div>
+        </section>
+      </section>
+    </main>
+
+    <!-- Clip management modal (preview, approve, delete) -->
+    <div id="manageModal" class="modal">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <div class="video-container" style="margin-bottom:12px;">
+          <video id="adminPreviewVideo" controls style="max-width:100%; width:100%;">
+            <source src="" type="video/mp4" />
+          </video>
+        </div>
+        <div class="clip-preview" id="deleteClipPreview">
+          <!-- Clip details will be injected here -->
+        </div>
+        <div class="modal-actions">
+          <button id="approveClipBtn" class="btn primary">Approve</button>
+          <button id="confirmDeleteBtn" class="btn danger">Delete</button>
+          <button id="cancelDeleteBtn" class="btn secondary">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <footer class="site-footer">
+      <div class="container">
+        <small>© <span id="year"></span> Clip Portal Admin Panel</small>
+      </div>
+    </footer>
+
+    <script src="./script.js?v=8" defer></script>
+  </body>
+</html>

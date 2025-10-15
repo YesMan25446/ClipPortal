@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Account - Clip Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <h1 class="logo">Clip Portal</h1>
+        <nav class="nav">
+          <a href="index.html">Watch</a>
+          <a href="submit.html">Submit</a>
+          <a href="about.html">About</a>
+          <a href="messages.html">Messages</a>
+          <a href="account.html" class="active">Account</a>
+          <a href="admin.html" class="admin-link">Admin</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="card">
+        <h2>Sign Up</h2>
+        <form id="signupForm">
+          <div class="grid">
+            <div class="field">
+              <label for="su_username">Username</label>
+              <input id="su_username" name="username" type="text" minlength="3" maxlength="32" required />
+              <small class="error" data-for="su_username"></small>
+            </div>
+            <div class="field">
+              <label for="su_email">Email</label>
+              <input id="su_email" name="email" type="email" required />
+              <small class="error" data-for="su_email"></small>
+            </div>
+            <div class="field span-2">
+              <label for="su_password">Password</label>
+              <input id="su_password" name="password" type="password" minlength="6" required />
+              <small class="error" data-for="su_password"></small>
+            </div>
+          </div>
+          <p class="muted">After signing up, you’ll receive a verification email. You must verify before logging in.</p>
+          <div class="actions">
+            <button type="submit" class="btn primary">Create Account</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Log In</h2>
+        <form id="loginUserForm">
+          <div class="grid">
+            <div class="field">
+              <label for="li_username">Username</label>
+              <input id="li_username" name="username" type="text" required />
+            </div>
+            <div class="field">
+              <label for="li_password">Password</label>
+              <input id="li_password" name="password" type="password" required />
+            </div>
+          </div>
+          <div class="actions">
+            <button type="submit" class="btn secondary">Log In</button>
+            <button type="button" id="logoutButton" class="btn">Log Out</button>
+            <button type="button" id="resendVerifyBtn" class="btn">Resend Verification</button>
+          </div>
+        </form>
+        <p class="muted">After logging in, you can rate clips, add friends, and send messages.</p>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <small>© <span id="year"></span> Clip Portal</small>
+      </div>
+    </footer>
+
+    <script src="./script.js?v=8" defer></script>
+  </body>
+</html>

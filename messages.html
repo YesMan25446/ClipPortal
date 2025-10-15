@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Messages - Clip Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <h1 class="logo">Clip Portal</h1>
+        <nav class="nav">
+          <a href="index.html">Watch</a>
+          <a href="submit.html">Submit</a>
+          <a href="about.html">About</a>
+          <a href="messages.html" class="active">Messages</a>
+          <a href="account.html">Account</a>
+          <a href="admin.html" class="admin-link">Admin</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="card">
+        <h2>Friends</h2>
+        <div class="grid">
+          <div class="field">
+            <label for="userSearch">Find users</label>
+            <input id="userSearch" type="text" placeholder="Search by username" />
+          </div>
+          <div class="actions">
+            <button id="searchBtn" class="btn">Search</button>
+          </div>
+        </div>
+        <div id="searchResults" class="recent-clips"></div>
+        <hr />
+        <div id="friendList" class="recent-clips"></div>
+      </section>
+
+      <section class="card">
+        <h2>Conversation</h2>
+        <div id="conversationHeader" class="muted">Select a friend to view messages.</div>
+        <div id="conversation" style="max-height: 400px; overflow: auto; background: rgba(255,255,255,0.02); padding: 12px; border-radius: 8px; border: 1px solid var(--border);"></div>
+        <div class="grid" style="margin-top: 12px;">
+          <div class="field span-2">
+            <label for="messageInput">Message</label>
+            <input id="messageInput" type="text" placeholder="Type a message" />
+          </div>
+          <div class="actions">
+            <button id="sendMessageBtn" class="btn primary">Send</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <small>© <span id="year"></span> Clip Portal</small>
+      </div>
+    </footer>
+
+<script src="./script.js?v=8" defer></script>
+  </body>
+</html>
