@@ -17,6 +17,8 @@ const { v4: uuidv4 } = require('uuid');
 let nodemailer = null;
 try { nodemailer = require('nodemailer'); } catch (_) { /* optional dependency */ }
 const crypto = require('crypto');
+const { db } = require('./database'); // Use encrypted database instead of JSON files
+const { backupSystem } = require('./backup-system'); // Automated backup system
 const EMAIL_ENC_KEY = process.env.EMAIL_ENC_KEY;
 
 function encryptEmail(email) {
@@ -131,12 +133,29 @@ if (!fs.existsSync(commentsFile)) {
   fs.writeJsonSync(commentsFile, { comments: [] });
 }
 
-// Helper functions
+// Helper functions - now using encrypted database instead of JSON files
 function readUsers() {
-  try { return fs.readJsonSync(usersFile); } catch { return { users: [] }; }
+  // Legacy compatibility function - returns users in old format
+  try {
+    const allUsers = db.searchUsers('', 1000); // Get all users
+    return {
+      users: allUsers.map(user => ({
+        ...user,
+        friends: db.getFriends(user.id).map(f => f.id),
+        incomingRequests: db.getPendingFriendRequests(user.id).map(f => f.id),
+        outgoingRequests: [] // Not tracking outgoing requests in new system
+      }))
+    };
+  } catch (error) {
+    console.error('Error reading users from database:', error);
+    return { users: [] };
+  }
 }
+
 function writeUsers(data) {
-  try { fs.writeJsonSync(usersFile, data, { spaces: 2 }); return true; } catch { return false; }
+  // This function is deprecated but kept for compatibility
+  console.warn('writeUsers() is deprecated - data is now automatically saved to encrypted database');
+  return true;
 }
 function readMessages() {
   try { return fs.readJsonSync(messagesFile); } catch { return { messages: [] }; }
@@ -152,7 +171,14 @@ function writeComments(data) {
 }
 
 function getUserPublic(u) {
-  return { id: u.id, username: u.username, friends: u.friends || [], createdAt: u.createdAt };
+  // Convert database user format to public format
+  const friends = u.friends || db.getFriends(u.id).map(f => f.id);
+  return { 
+    id: u.id, 
+    username: u.username, 
+    friends: friends, 
+    createdAt: u.created_at || u.createdAt 
+  };
 }
 
 function isValidEmail(email) {
@@ -383,30 +409,43 @@ app.post('/api/auth/register', async (req, res) => {
     if (!isValidEmail(email)) {
       return res.status(400).json({ success: false, error: 'Please enter a valid email address' });
     }
-    const users = readUsers();
+    
     const emailLower = String(email).toLowerCase();
-    if (users.users.find(u => u.username.toLowerCase() === String(username).toLowerCase())) {
+    
+    // Check if username or email already exists using database
+    if (db.getUserByUsername(username)) {
       return res.status(409).json({ success: false, error: 'Username already taken' });
     }
-    if (users.users.find(u => (u.email || '').toLowerCase() === emailLower)) {
+    if (db.getUserByEmail(emailLower)) {
       return res.status(409).json({ success: false, error: 'Email already in use' });
     }
+    
     const id = uuidv4();
     const passwordHash = bcrypt.hashSync(password, 10);
     const verifyToken = uuidv4();
-    const user = {
+    
+    const userData = {
       id,
       username,
-      email: encryptEmail(emailLower),
+      email: emailLower,
       passwordHash,
       isVerified: false,
       verifyToken,
       verifyTokenExpires: new Date(Date.now() + 24*3600*1000).toISOString(),
-      friends: [], incomingRequests: [], outgoingRequests: [],
-      createdAt: new Date().toISOString()
+      isAdmin: false
     };
-    users.users.push(user);
-    writeUsers(users);
+    
+    // Create user in encrypted database
+    db.createUser(userData);
+    
+    // Log the registration
+    db.logAction(
+      id,
+      'USER_REGISTERED',
+      { username, email: emailLower },
+      req.ip,
+      req.headers['user-agent']
+    );
 
     // Send verification email (best-effort)
     await sendVerificationEmail({ to: emailLower, username, token: verifyToken });
@@ -421,12 +460,24 @@ app.post('/api/auth/register', async (req, res) => {
 app.post('/api/auth/login', (req, res) => {
   try {
     const { username, password } = req.body || {};
-    const users = readUsers();
-    const user = users.users.find(u => u.username.toLowerCase() === (username || '').toLowerCase());
+    
+    // Get user from encrypted database
+    const user = db.getUserByUsername(username);
     if (!user) return res.status(401).json({ success: false, error: 'Invalid credentials' });
-    if (!bcrypt.compareSync(password || '', user.passwordHash)) return res.status(401).json({ success: false, error: 'Invalid credentials' });
-    if (!user.isVerified) return res.status(403).json({ success: false, error: 'Email not verified. Please check your inbox.', needsVerification: true });
+    if (!bcrypt.compareSync(password || '', user.password_hash)) return res.status(401).json({ success: false, error: 'Invalid credentials' });
+    if (!user.is_verified) return res.status(403).json({ success: false, error: 'Email not verified. Please check your inbox.', needsVerification: true });
+    
     const token = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '30d' });
+    
+    // Log the login
+    db.logAction(
+      user.id,
+      'USER_LOGIN',
+      { username: user.username },
+      req.ip,
+      req.headers['user-agent']
+    );
+    
     res.cookie('auth', token, { httpOnly: true, sameSite: 'lax' });
     res.json({ success: true, user: getUserPublic(user) });
   } catch (e) {
@@ -443,64 +494,110 @@ app.post('/api/auth/logout', (req, res) => {
 app.get('/api/auth/me', (req, res) => {
   const uid = optionalAuth(req);
   if (!uid) return res.json({ success: true, user: null });
-  const users = readUsers();
-  const user = users.users.find(u => u.id === uid);
+  
+  const user = db.getUserById(uid);
   if (!user) return res.json({ success: true, user: null });
-  const incoming = user.incomingRequests?.length || 0;
-  res.json({ success: true, user: { ...getUserPublic(user), isAdmin: !!user.isAdmin, incomingRequests: incoming, isVerified: !!user.isVerified } });
+  
+  const incoming = db.getPendingFriendRequests(uid).length;
+  res.json({ 
+    success: true, 
+    user: { 
+      ...getUserPublic(user), 
+      isAdmin: !!user.is_admin, 
+      incomingRequests: incoming, 
+      isVerified: !!user.is_verified 
+    } 
+  });
 });
 
 // User search (for adding friends)
 app.get('/api/users/search', authRequired, (req, res) => {
   const q = (req.query.q || '').toLowerCase().trim();
-  const users = readUsers();
-  let list = users.users;
-  if (q) list = list.filter(u => u.username.toLowerCase().includes(q));
-  list = list.slice(0, 20).map(getUserPublic);
-  res.json({ success: true, users: list });
+  
+  try {
+    const users = db.searchUsers(q, 20); // Limit to 20 results
+    const publicUsers = users.map(getUserPublic);
+    res.json({ success: true, users: publicUsers });
+  } catch (error) {
+    console.error('User search error:', error);
+    res.status(500).json({ success: false, error: 'Search failed' });
+  }
 });
 
 // Friends routes
 app.get('/api/friends', authRequired, (req, res) => {
-  const users = readUsers();
-  const me = users.users.find(u => u.id === req.userId);
-  const friends = (me.friends || []).map(fid => {
-    const u = users.users.find(x => x.id === fid);
-    return u ? getUserPublic(u) : null;
-  }).filter(Boolean);
-  res.json({ success: true, friends, incomingRequests: me.incomingRequests || [], outgoingRequests: me.outgoingRequests || [] });
+  const friends = db.getFriends(req.userId);
+  const incomingRequests = db.getPendingFriendRequests(req.userId);
+  
+  res.json({ 
+    success: true, 
+    friends: friends.map(getUserPublic), 
+    incomingRequests: incomingRequests.map(r => r.id), 
+    outgoingRequests: [] // Not tracking outgoing in new system
+  });
 });
 
 app.post('/api/friends/request/:id', authRequired, (req, res) => {
   const targetId = req.params.id;
   if (targetId === req.userId) return res.status(400).json({ success: false, error: 'Cannot friend yourself' });
-  const users = readUsers();
-  const me = users.users.find(u => u.id === req.userId);
-  const target = users.users.find(u => u.id === targetId);
+  
+  const target = db.getUserById(targetId);
   if (!target) return res.status(404).json({ success: false, error: 'User not found' });
-  me.friends = me.friends || []; target.friends = target.friends || [];
-  me.incomingRequests = me.incomingRequests || []; me.outgoingRequests = me.outgoingRequests || [];
-  target.incomingRequests = target.incomingRequests || []; target.outgoingRequests = target.outgoingRequests || [];
-  if (me.friends.includes(targetId)) return res.status(409).json({ success: false, error: 'Already friends' });
-  if ((me.outgoingRequests || []).includes(targetId)) return res.status(409).json({ success: false, error: 'Request already sent' });
-  target.incomingRequests.push(me.id);
-  me.outgoingRequests.push(target.id);
-  writeUsers(users);
-  res.json({ success: true, message: 'Friend request sent' });
+  
+  // Check if already friends
+  const existingFriends = db.getFriends(req.userId);
+  if (existingFriends.some(f => f.id === targetId)) {
+    return res.status(409).json({ success: false, error: 'Already friends' });
+  }
+  
+  // Check if request already exists
+  const pendingRequests = db.getPendingFriendRequests(targetId);
+  if (pendingRequests.some(r => r.id === req.userId)) {
+    return res.status(409).json({ success: false, error: 'Request already sent' });
+  }
+  
+  try {
+    db.sendFriendRequest(req.userId, targetId);
+    
+    // Log the action
+    db.logAction(
+      req.userId,
+      'FRIEND_REQUEST_SENT',
+      { targetUserId: targetId, targetUsername: target.username },
+      req.ip,
+      req.headers['user-agent']
+    );
+    
+    res.json({ success: true, message: 'Friend request sent' });
+  } catch (error) {
+    console.error('Friend request error:', error);
+    res.status(500).json({ success: false, error: 'Failed to send friend request' });
+  }
 });
 
 app.post('/api/friends/accept/:id', authRequired, (req, res) => {
   const requesterId = req.params.id;
-  const users = readUsers();
-  const me = users.users.find(u => u.id === req.userId);
-  const requester = users.users.find(u => u.id === requesterId);
+  
+  const requester = db.getUserById(requesterId);
   if (!requester) return res.status(404).json({ success: false, error: 'User not found' });
-  me.incomingRequests = (me.incomingRequests || []).filter(id => id !== requesterId);
-  requester.outgoingRequests = (requester.outgoingRequests || []).filter(id => id !== req.userId);
-  me.friends = Array.from(new Set([...(me.friends || []), requesterId]));
-  requester.friends = Array.from(new Set([...(requester.friends || []), req.userId]));
-  writeUsers(users);
-  res.json({ success: true, message: 'Friend request accepted' });
+  
+  try {
+    db.acceptFriendRequest(req.userId, requesterId);
+    
+    // Log the action
+    db.logAction(
+      req.userId,
+      'FRIEND_REQUEST_ACCEPTED',
+      { requesterUserId: requesterId, requesterUsername: requester.username },
+      req.ip,
+      req.headers['user-agent']
+    );
+    
+    res.json({ success: true, message: 'Friend request accepted' });
+  } catch (error) {
+    console.error('Friend accept error:', error);
+    res.status(500).json({ success: false, error: 'Failed to accept friend request' });
+  }
 });
 
 // Admin routes
@@ -1029,7 +1126,16 @@ app.listen(PORT, '0.0.0.0', () => {
   const ip = getLocalIPv4();
   console.log(`📱 Access from your phone (same Wi‑Fi): http://${ip}:${PORT}`);
   console.log(`📁 Uploads directory: ${uploadsDir}`);
-  console.log(`💾 Data file: ${dataFile}`);
+  console.log(`🔐 Database: Encrypted SQLite with automatic backups`);
+  
+  // Start automated backup system
+  try {
+    backupSystem.startScheduledBackups();
+    console.log(`💾 Automated database backups enabled (daily at 2 AM)`);
+  } catch (error) {
+    console.warn('⚠️  Failed to start backup system:', error.message);
+  }
+  
   // Kick off background thumbnail generation for any existing clips
   ensureThumbnailsForExistingClips().catch(err => console.error('Startup thumbnail generation failed:', err));
 });
