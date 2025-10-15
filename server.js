@@ -17,10 +17,8 @@ const { v4: uuidv4 } = require('uuid');
 let nodemailer = null;
 try { nodemailer = require('nodemailer'); } catch (_) { /* optional dependency */ }
 const crypto = require('crypto');
-// Use simple database for deployment compatibility
-const { db } = process.env.NODE_ENV === 'production' 
-  ? require('./database-simple') 
-  : require('./database');
+// Use simple database for all environments (no SQLite compilation issues)
+const { db } = require('./database-simple');
 const { backupSystem } = require('./backup-system'); // Automated backup system
 const EMAIL_ENC_KEY = process.env.EMAIL_ENC_KEY;
 

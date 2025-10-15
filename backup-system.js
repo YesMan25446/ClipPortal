@@ -1,4 +1,4 @@
-const { db } = require('./database');
+const { db } = require('./database-simple');
 const path = require('path');
 const fs = require('fs-extra');
 const cron = require('node-cron');
