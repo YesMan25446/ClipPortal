@@ -342,6 +342,7 @@ function updateStats(data) {
 }
 
 // On startup, ensure thumbnails exist for any uploaded clips that are missing them
+// Deployment trigger: force reset database v2
 async function ensureThumbnailsForExistingClips() {
   try {
     const data = readData();
