@@ -430,9 +430,9 @@ app.post('/api/auth/register', async (req, res) => {
       username,
       email: emailLower,
       passwordHash,
-      isVerified: false,
-      verifyToken,
-      verifyTokenExpires: new Date(Date.now() + 24*3600*1000).toISOString(),
+      isVerified: true, // Skip email verification for easier setup
+      verifyToken: null,
+      verifyTokenExpires: null,
       isAdmin: false
     };
     
