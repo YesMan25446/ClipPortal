@@ -400,6 +400,7 @@ async function ensureThumbnailsForExistingClips() {
 // Auth routes
 app.post('/api/auth/register', async (req, res) => {
   try {
+    console.log('Registration attempt:', { username: req.body?.username, email: req.body?.email });
     const { username, email, password } = req.body || {};
     if (!username || !password || !email) {
       return res.status(400).json({ success: false, error: 'Username, email and password are required' });
@@ -426,7 +427,9 @@ app.post('/api/auth/register', async (req, res) => {
     const verifyToken = uuidv4();
     
     // Check if this is the first user to make them admin
+    console.log('Checking if first user...');
     const isFirstUser = db.getAllUsers().length === 0;
+    console.log('Is first user:', isFirstUser);
     
     const userData = {
       id,
@@ -439,8 +442,10 @@ app.post('/api/auth/register', async (req, res) => {
       isAdmin: isFirstUser
     };
     
+    console.log('Creating user with data:', { ...userData, passwordHash: '[hidden]' });
     // Create user in encrypted database
     db.createUser(userData);
+    console.log('User created successfully');
     
     // Log the registration
     db.logAction(
@@ -456,8 +461,9 @@ app.post('/api/auth/register', async (req, res) => {
 
     res.json({ success: true, message: 'Account created. Please check your email to verify your account.' });
   } catch (e) {
-    console.error('register error', e);
-    res.status(500).json({ success: false, error: 'Register failed' });
+    console.error('register error:', e);
+    console.error('Stack:', e.stack);
+    res.status(500).json({ success: false, error: 'Register failed: ' + e.message });
   }
 });
 
