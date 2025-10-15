@@ -282,14 +282,19 @@ class DatabaseManager {
 
   updateUser(id, updates) {
     const now = new Date().toISOString();
-    const encryptedEmail = updates.email ? encrypt(updates.email.toLowerCase()) : null;
+    const currentUser = userQueries.findById.get(id);
+    if (!currentUser) return null;
+    
+    const encryptedEmail = updates.email ? encrypt(updates.email.toLowerCase()) : currentUser.email_encrypted;
+    const isVerified = updates.isVerified !== undefined ? (updates.isVerified ? 1 : 0) : currentUser.is_verified;
+    const isAdmin = updates.isAdmin !== undefined ? (updates.isAdmin ? 1 : 0) : currentUser.is_admin;
     
     return userQueries.update.run(
-      encryptedEmail || userQueries.findById.get(id)?.email_encrypted,
-      updates.isVerified ? 1 : 0,
-      updates.verifyToken || null,
-      updates.verifyTokenExpires || null,
-      updates.isAdmin ? 1 : 0,
+      encryptedEmail,
+      isVerified,
+      updates.verifyToken !== undefined ? updates.verifyToken : currentUser.verify_token,
+      updates.verifyTokenExpires !== undefined ? updates.verifyTokenExpires : currentUser.verify_token_expires,
+      isAdmin,
       now,
       id
     );
@@ -302,6 +307,17 @@ class DatabaseManager {
 
   deleteUser(id) {
     return userQueries.delete.run(id);
+  }
+
+  getAllUsers(limit = 1000, offset = 0) {
+    const users = userQueries.list.all(limit, offset);
+    return users.map(user => {
+      user.email = decrypt(user.email_encrypted);
+      user.is_verified = Boolean(user.is_verified);
+      user.is_admin = Boolean(user.is_admin);
+      delete user.email_encrypted;
+      return user;
+    });
   }
 
   searchUsers(query, limit = 50, offset = 0) {

@@ -391,7 +391,7 @@ async function ensureThumbnailsForExistingClips() {
   try {
     const allUsers = db.getAllUsers();
     if (allUsers.length > 0 && !allUsers.some(u => u.is_admin)) {
-      db.updateUser(allUsers[0].id, { is_admin: true });
+      db.updateUser(allUsers[0].id, { isAdmin: true });
       console.log(`👑 Promoted initial user '${allUsers[0].username}' to admin`);
     }
   } catch (e) { /* ignore */ }
