@@ -897,6 +897,17 @@
     }
 
     loadFriends();
+
+    // Auto-refresh friends and requests every 20s
+    if (!window.__friendsPoll) {
+      window.__friendsPoll = setInterval(() => {
+        loadFriends();
+      }, 20000);
+      window.addEventListener('beforeunload', () => {
+        try { clearInterval(window.__friendsPoll); } catch (_) {}
+        window.__friendsPoll = null;
+      });
+    }
   }
 
   // Admin page functionality
