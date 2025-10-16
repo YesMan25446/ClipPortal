@@ -69,6 +69,55 @@
   let __prevUnreadMsgs = null;
   let __prevPendingClips = null;
 
+  // Soft notification sounds (Web Audio, very low volume)
+  let __audioCtx = null;
+  function ensureAudio() {
+    try {
+      if (!__audioCtx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return null;
+        __audioCtx = new Ctx();
+      }
+      if (__audioCtx.state === 'suspended') __audioCtx.resume();
+      return __audioCtx;
+    } catch (_) { return null; }
+  }
+  function beep({ frequency = 660, duration = 120, volume = 0.15, type = 'sine' } = {}) {
+    const ctx = ensureAudio();
+    if (!ctx) return;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = type;
+    o.frequency.value = frequency;
+    g.gain.value = volume;
+    o.connect(g).connect(ctx.destination);
+    const now = ctx.currentTime;
+    o.start(now);
+    o.stop(now + duration / 1000);
+  }
+  function playNotification(kind) {
+    // keep sounds subtle
+    switch (kind) {
+      case 'message':
+        beep({ frequency: 900, duration: 90, volume: 0.14 });
+        setTimeout(() => beep({ frequency: 700, duration: 90, volume: 0.14 }), 120);
+        break;
+      case 'friend':
+        beep({ frequency: 600, duration: 120, volume: 0.13 });
+        break;
+      case 'admin':
+        beep({ frequency: 520, duration: 90, volume: 0.13 });
+        setTimeout(() => beep({ frequency: 740, duration: 90, volume: 0.13 }), 110);
+        break;
+      default:
+        beep();
+    }
+  }
+  // Prime/resume audio context on first user interaction
+  ['click','keydown','touchstart'].forEach(evt => {
+    window.addEventListener(evt, () => { try { ensureAudio(); } catch (_) {} }, { once: true });
+  });
+
   async function updateNavAuth() {
     const me = await getCurrentUser(true);
     const adminLink = document.querySelector('a[href="admin.html"]');
@@ -126,12 +175,14 @@
         // Toasts when counts increase
         if (__prevUnreadMsgs !== null && unread > __prevUnreadMsgs) {
           showInfo(`New message${unread-__prevUnreadMsgs>1?'s':''} received`);
+          playNotification('message');
         }
         __prevUnreadMsgs = unread;
       } catch (_) {}
 
       if (__prevIncoming !== null && incoming > __prevIncoming) {
         showInfo('New friend request received');
+        playNotification('friend');
       }
       __prevIncoming = incoming;
     }
@@ -164,6 +215,7 @@
           }
           if (__prevPendingClips !== null && pending > __prevPendingClips) {
             showInfo('New clip submitted (pending approval)');
+            playNotification('admin');
           }
           __prevPendingClips = pending;
         } catch (_) {}
