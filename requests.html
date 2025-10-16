@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Friend Requests - Clip Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <h1 class="logo">Clip Portal</h1>
+        <nav class="nav">
+          <a href="index.html">Watch</a>
+          <a href="submit.html">Submit</a>
+          <a href="about.html">About</a>
+          <a href="messages.html">Messages</a>
+          <a href="account.html">Account</a>
+          <a href="admin.html" class="admin-link">Admin</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="card">
+        <h2>Friend Requests</h2>
+        <p id="requestsInfo" class="muted">Accept or decline incoming requests.</p>
+        <div id="incomingRequestsOnly" class="recent-clips"></div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <small>© <span id="year"></span> Clip Portal</small>
+      </div>
+    </footer>
+
+    <script src="./script.js?v=10" defer></script>
+  </body>
+</html>

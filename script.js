@@ -1064,6 +1064,54 @@
     }
   }
 
+  // Friend Requests page functionality
+  function initRequestsPage() {
+    const incomingList = document.getElementById('incomingRequestsOnly');
+    const info = document.getElementById('requestsInfo');
+
+    async function load() {
+      const { data } = await api('/friends');
+      if (data?.success) {
+        const list = data.incomingRequests || [];
+        if (!list.length) {
+          if (incomingList) incomingList.innerHTML = '<p class="muted">No friend requests.</p>';
+          return;
+        }
+        if (incomingList) incomingList.innerHTML = list.map(u => `
+          <div class="recent-clip">
+            <div class="recent-info">
+              <h4>${escapeHtml(u.username)}</h4>
+            </div>
+            <div class="actions">
+              <button class="btn primary" data-accept-request="${u.id}">Accept</button>
+              <button class="btn danger" data-decline-request="${u.id}" style="margin-left:6px;">Decline</button>
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+
+    if (incomingList) {
+      incomingList.addEventListener('click', async (e) => {
+        const a = e.target.closest('button[data-accept-request]');
+        const d = e.target.closest('button[data-decline-request]');
+        if (a) {
+          const id = a.getAttribute('data-accept-request');
+          const { data } = await api(`/friends/accept/${id}`, { method: 'POST' });
+          if (data?.success) { showSuccess('Friend request accepted'); load(); updateNavAuth(); }
+          else { showError(data?.error || 'Failed to accept'); }
+        } else if (d) {
+          const id = d.getAttribute('data-decline-request');
+          const { data } = await api(`/friends/decline/${id}`, { method: 'POST' });
+          if (data?.success) { showInfo('Request declined'); load(); updateNavAuth(); }
+          else { showError(data?.error || 'Failed to decline'); }
+        }
+      });
+    }
+
+    load();
+  }
+
   // Admin page functionality
   function initAdminPage() {
     const loginSection = $('#loginSection');
@@ -1379,6 +1427,41 @@
     })();
   }
 
+  // Enhance nav with Messages dropdown (Messages / Friend Requests)
+  (function setupMessagesDropdown(){
+    try {
+      const nav = document.querySelector('.nav');
+      const link = nav && nav.querySelector('a[href="messages.html"]');
+      if (!link || link.closest('.nav-dropdown')) return;
+      const wrapper = document.createElement('span');
+      wrapper.className = 'nav-dropdown';
+      wrapper.style.position = 'relative';
+      wrapper.style.display = 'inline-block';
+      link.parentNode.insertBefore(wrapper, link);
+      wrapper.appendChild(link);
+      const menu = document.createElement('div');
+      menu.className = 'submenu';
+      Object.assign(menu.style, {
+        display: 'none', position: 'absolute', top: '100%', left: '0',
+        background: 'rgba(0,0,0,0.9)', padding: '8px 10px', borderRadius: '8px',
+        border: '1px solid rgba(255,255,255,0.1)', minWidth: '160px'
+      });
+      const mkItem = (href, text) => {
+        const a = document.createElement('a');
+        a.href = href; a.textContent = text;
+        a.style.display = 'block'; a.style.color = '#fff'; a.style.padding = '6px 8px'; a.style.textDecoration = 'none';
+        a.onmouseenter = () => { a.style.background = 'rgba(255,255,255,0.08)'; };
+        a.onmouseleave = () => { a.style.background = 'transparent'; };
+        return a;
+      };
+      menu.appendChild(mkItem('messages.html', 'Messages'));
+      menu.appendChild(mkItem('requests.html', 'Friend Requests'));
+      wrapper.appendChild(menu);
+      wrapper.addEventListener('mouseenter', () => { menu.style.display = 'block'; });
+      wrapper.addEventListener('mouseleave', () => { menu.style.display = 'none'; });
+    } catch (_) {}
+  })();
+
   // Initialize based on current page
   updateNavAuth();
 
@@ -1390,6 +1473,8 @@
     initAuthPage();
   } else if (window.location.pathname.includes('messages.html') || window.location.pathname.endsWith('messages.html')) {
     initMessagesPage();
+  } else if (window.location.pathname.includes('requests.html') || window.location.pathname.endsWith('requests.html')) {
+    initRequestsPage();
   } else {
     initLandingPage();
   }

@@ -831,13 +831,21 @@ app.get('/api/clips', (req, res) => {
 
     // Status filtering
     const statusParam = (req.query.status || '').toLowerCase();
-    if (!isAdmin) {
-      clips = clips.filter(c => c.status === 'approved');
-    } else if (statusParam === 'pending') {
-      clips = clips.filter(c => c.status === 'pending');
+
+    // Default: only approved for everyone (including admins) unless explicit status provided
+    if (!statusParam) {
+      clips = clips.filter(c => (c.status || 'pending') === 'approved');
     } else if (statusParam === 'approved') {
-      clips = clips.filter(c => c.status === 'approved');
-    } // 'all' or empty -> no additional filter for admin
+      clips = clips.filter(c => (c.status || 'pending') === 'approved');
+    } else if (statusParam === 'pending') {
+      // Only admins can view pending and only when explicitly requested (used by admin page)
+      clips = isAdmin ? clips.filter(c => (c.status || 'pending') === 'pending')
+                      : clips.filter(c => (c.status || 'pending') === 'approved');
+    } else if (statusParam === 'all') {
+      clips = isAdmin ? clips : clips.filter(c => (c.status || 'pending') === 'approved');
+    } else {
+      clips = clips.filter(c => (c.status || 'pending') === 'approved');
+    }
 
     // Filter by category
     const category = req.query.category;
