@@ -236,6 +236,48 @@ class SimpleDatabaseManager {
     return true;
   }
 
+  // Helper for admin: delete user and clean related data (friends, messages, comments)
+  deleteUserCascade(id) {
+    // Remove user
+    this.deleteUser(id);
+
+    // Remove friend relations
+    try {
+      const friends = this.readFriends();
+      const before = friends.relations.length;
+      friends.relations = friends.relations.filter(r => r.user_id !== id && r.friend_id !== id);
+      if (friends.relations.length !== before) this.writeFriends(friends);
+    } catch (_) {}
+
+    // Clean legacy fields in other users
+    try {
+      const users = this.readUsers();
+      for (const u of users.users) {
+        if (Array.isArray(u.friends)) u.friends = u.friends.filter(x => x !== id);
+        if (Array.isArray(u.incomingRequests)) u.incomingRequests = u.incomingRequests.filter(x => x !== id);
+        if (Array.isArray(u.outgoingRequests)) u.outgoingRequests = u.outgoingRequests.filter(x => x !== id);
+      }
+      this.writeUsers(users);
+    } catch (_) {}
+
+    // Remove messages and comments for this user
+    try {
+      const msgs = fs.readJsonSync(messagesFile);
+      const mBefore = msgs.messages.length;
+      msgs.messages = msgs.messages.filter(m => m.senderId !== id && m.recipientId !== id);
+      if (msgs.messages.length !== mBefore) fs.writeJsonSync(messagesFile, msgs, { spaces: 2 });
+    } catch (_) {}
+
+    try {
+      const comments = fs.readJsonSync(commentsFile);
+      const cBefore = comments.comments.length;
+      comments.comments = comments.comments.filter(c => c.userId !== id);
+      if (comments.comments.length !== cBefore) fs.writeJsonSync(commentsFile, comments, { spaces: 2 });
+    } catch (_) {}
+
+    return true;
+  }
+
   getAllUsers(limit = 1000, offset = 0) {
     const users = this.readUsers();
     return users.users.slice(offset, offset + limit).map(user => {

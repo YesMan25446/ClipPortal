@@ -850,28 +850,48 @@ app.delete('/api/admin/users/:id', adminRequired, (req, res) => {
   try {
     const userId = req.params.id;
     const currentUser = req.userId;
-    const users = readUsers();
-    const toDelete = users.users.find(u => u.id === userId);
-    if (!toDelete) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
+
+    // Locate real user from encrypted DB
+    const allUsers = db.getAllUsers(10000);
+    const toDelete = allUsers.find(u => u.id === userId);
+    if (!toDelete) return res.status(404).json({ success: false, error: 'User not found' });
+
     // Prevent admin from deleting themselves
     if (userId === currentUser) {
       return res.status(403).json({ success: false, error: 'You cannot delete your own account from admin panel.' });
     }
-    // If deleting admin, ensure at least one admin remains
-    if (toDelete.isAdmin) {
-      const adminCount = users.users.filter(u => u.isAdmin).length;
+
+    // Ensure at least one admin remains if deleting an admin
+    if (toDelete.is_admin) {
+      const adminCount = allUsers.filter(u => u.is_admin).length;
       if (adminCount <= 1) {
         return res.status(400).json({ success: false, error: 'There must be at least one admin.' });
       }
     }
-    users.users = users.users.filter(u => u.id !== userId);
-    if (writeUsers(users)) {
-      return res.json({ success: true, message: 'User deleted successfully' });
-    } else {
-      return res.status(500).json({ success: false, error: 'Failed to delete user' });
+
+    // Delete user's related data in DB (friends/messages/comments)
+    db.deleteUserCascade(userId);
+
+    // Also remove their clips and files from clips store
+    let data = readData();
+    const before = data.clips.length;
+    for (const clip of [...data.clips]) {
+      if (clip.submittedBy === userId) {
+        // Delete associated files similar to clip delete route
+        if (clip.filePath) {
+          const filePath = webToStoragePath(clip.filePath);
+          try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch (_) {}
+        }
+        if (clip.thumbnail && clip.thumbnail.startsWith('/thumbnails/')) {
+          const tPath = webToStoragePath(clip.thumbnail);
+          try { if (fs.existsSync(tPath)) fs.unlinkSync(tPath); } catch (_) {}
+        }
+      }
     }
+    data.clips = data.clips.filter(c => c.submittedBy !== userId);
+    writeData(updateStats(data));
+
+    return res.json({ success: true, message: 'User deleted successfully', removedClips: before - data.clips.length });
   } catch (err) {
     console.error('Error deleting user:', err);
     res.status(500).json({ success: false, error: 'Failed to delete user' });
