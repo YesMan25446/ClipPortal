@@ -17,7 +17,7 @@ const { v4: uuidv4 } = require('uuid');
 let nodemailer = null;
 try { nodemailer = require('nodemailer'); } catch (_) { /* optional dependency */ }
 const crypto = require('crypto');
-// Use simple database for all environments (no SQLite compilation issues)
+// Use simple database with persistent storage on Railway volumes if available
 const { db } = require('./database-simple');
 const { backupSystem } = require('./backup-system'); // Automated backup system
 const EMAIL_ENC_KEY = process.env.EMAIL_ENC_KEY;
@@ -59,6 +59,8 @@ function decryptEmail(encData) {
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+// Persistent storage root (Railway volume if attached)
+const STORAGE_ROOT = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, 'data');
 
 // Admin configuration
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Vincentfårisig132'; // Change this to your desired password
@@ -69,9 +71,9 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(express.static('.')); // Serve static files from current directory
 
-// Ensure uploads and thumbnails directories exist
-const uploadsDir = path.join(__dirname, 'uploads');
-const thumbnailsDir = path.join(__dirname, 'thumbnails');
+// Ensure uploads and thumbnails directories exist (persisted)
+const uploadsDir = path.join(STORAGE_ROOT, 'uploads');
+const thumbnailsDir = path.join(STORAGE_ROOT, 'thumbnails');
 fs.ensureDirSync(uploadsDir);
 fs.ensureDirSync(thumbnailsDir);
 
@@ -101,8 +103,8 @@ const upload = multer({
   }
 });
 
-// Data storage files
-const dataDir = path.join(__dirname, 'data');
+// Data storage files (persisted)
+const dataDir = STORAGE_ROOT;
 fs.ensureDirSync(dataDir);
 
 const dataFile = path.join(dataDir, 'clips.json');
@@ -272,6 +274,12 @@ function getTwitchThumbnail(url) {
   return null;
 }
 
+// Map web path (/uploads/..., /thumbnails/...) to storage path in STORAGE_ROOT
+function webToStoragePath(webPath) {
+  const p = String(webPath || '').replace(/^\//, '');
+  return path.join(STORAGE_ROOT, p.replace(/\//g, path.sep));
+}
+
 // Generate thumbnail from video file using FFmpeg
 function generateThumbnail(videoPath, thumbnailPath) {
   return new Promise((resolve, reject) => {
@@ -357,7 +365,7 @@ async function ensureThumbnailsForExistingClips() {
     for (const clip of data.clips) {
       const isPlaceholder = !clip.thumbnail || clip.thumbnail.startsWith('/images/');
       if (clip.filePath && isPlaceholder) {
-        const videoPath = path.join(__dirname, clip.filePath);
+const videoPath = webToStoragePath(clip.filePath);
         if (!fs.existsSync(videoPath)) {
           console.warn(`Video not found for thumbnail generation: ${videoPath}`);
           continue;
@@ -739,8 +747,8 @@ app.get('/health', (req, res) => {
 function fixMissingThumbnails(clips) {
   return clips.map(clip => {
     // If thumbnail is a local file path that doesn't exist, fall back to placeholder or external thumbnail
-    if (clip.thumbnail && clip.thumbnail.startsWith('/thumbnails/')) {
-      const thumbnailPath = path.join(__dirname, clip.thumbnail);
+if (clip.thumbnail && clip.thumbnail.startsWith('/thumbnails/')) {
+      const thumbnailPath = webToStoragePath(clip.thumbnail);
       if (!fs.existsSync(thumbnailPath)) {
         // Try to get external thumbnail if URL is available
         if (clip.url) {
@@ -1114,8 +1122,8 @@ app.delete('/api/clips/:id', adminRequired, (req, res) => {
     const clip = data.clips[clipIndex];
     
     // Delete associated files
-    if (clip.filePath) {
-      const filePath = path.join(__dirname, clip.filePath);
+if (clip.filePath) {
+      const filePath = webToStoragePath(clip.filePath);
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
         console.log(`Deleted video file: ${filePath}`);
@@ -1123,8 +1131,8 @@ app.delete('/api/clips/:id', adminRequired, (req, res) => {
     }
     
     // Delete thumbnail if it's a generated one (not YouTube/external)
-    if (clip.thumbnail && clip.thumbnail.startsWith('/thumbnails/')) {
-      const thumbnailPath = path.join(__dirname, clip.thumbnail);
+if (clip.thumbnail && clip.thumbnail.startsWith('/thumbnails/')) {
+      const thumbnailPath = webToStoragePath(clip.thumbnail);
       if (fs.existsSync(thumbnailPath)) {
         fs.unlinkSync(thumbnailPath);
         console.log(`Deleted thumbnail: ${thumbnailPath}`);
@@ -1191,6 +1199,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Clip Portal server running on http://localhost:${PORT}`);
   const ip = getLocalIPv4();
   console.log(`📱 Access from your phone (same Wi‑Fi): http://${ip}:${PORT}`);
+  console.log(`📁 Storage root: ${STORAGE_ROOT}`);
   console.log(`📁 Uploads directory: ${uploadsDir}`);
   console.log(`🔐 Database: Encrypted SQLite with automatic backups`);
   
