@@ -542,7 +542,7 @@ app.get('/api/friends', authRequired, (req, res) => {
   res.json({ 
     success: true, 
     friends: friends.map(getUserPublic), 
-    incomingRequests: incomingRequests.map(r => r.id), 
+    incomingRequests: incomingRequests.map(getUserPublic), 
     outgoingRequests: [] // Not tracking outgoing in new system
   });
 });

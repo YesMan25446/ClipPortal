@@ -68,6 +68,30 @@
     const me = await getCurrentUser(true);
     const adminLink = document.querySelector('a[href="admin.html"]');
     if (adminLink) adminLink.style.display = (me && me.isAdmin) ? '' : 'none';
+    // Incoming friend requests badge on Messages link
+    const msgLink = document.querySelector('a[href="messages.html"]');
+    if (msgLink) {
+      let badge = msgLink.querySelector('#navIncomingBadge');
+      const count = Number(me?.incomingRequests || 0);
+      if (count > 0) {
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.id = 'navIncomingBadge';
+          badge.className = 'badge';
+          badge.style.marginLeft = '6px';
+          badge.style.background = '#ff6b6b';
+          badge.style.color = '#fff';
+          badge.style.padding = '2px 6px';
+          badge.style.borderRadius = '10px';
+          badge.style.fontSize = '12px';
+          msgLink.appendChild(badge);
+        }
+        badge.textContent = String(count);
+        badge.style.display = '';
+      } else if (badge) {
+        badge.style.display = 'none';
+      }
+    }
   }
 
   // Landing page functionality
@@ -709,6 +733,8 @@
   // Messages page functionality
   function initMessagesPage() {
     const friendList = document.getElementById('friendList');
+    const incomingList = document.getElementById('incomingRequests');
+    const incomingSection = document.getElementById('incomingSection');
     const searchInput = document.getElementById('userSearch');
     const searchBtn = document.getElementById('searchBtn');
     const searchResults = document.getElementById('searchResults');
@@ -729,9 +755,8 @@
       return true;
     }
 
-    function renderFriends(friends, incoming = []) {
+    function renderFriends(friends) {
       if (!friendList) return;
-      const incomingSet = new Set(incoming);
       friendList.innerHTML = [
         ...friends.map(u => `
           <div class="recent-clip">
@@ -744,11 +769,38 @@
       ].join('');
     }
 
+    function renderIncoming(list) {
+      if (!incomingList || !incomingSection) return;
+      if (!list || list.length === 0) {
+        incomingSection.style.display = 'none';
+        incomingList.innerHTML = '';
+        return;
+      }
+      incomingSection.style.display = '';
+      incomingList.innerHTML = list.map(u => `
+        <div class="recent-clip">
+          <div class="recent-info">
+            <h4>${escapeHtml(u.username)}</h4>
+            <span class="recent-time">Request</span>
+          </div>
+          <div class="actions">
+            <button class="btn primary" data-accept-request="${u.id}">Accept</button>
+            <button class="btn danger" data-decline-request="${u.id}" style="margin-left:6px;">Decline</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
     async function loadFriends() {
       const ok = await ensureAuth(); if (!ok) return;
       const { data } = await api('/friends');
       if (data?.success) {
-        renderFriends(data.friends, data.incomingRequests);
+        renderFriends(data.friends);
+        renderIncoming(data.incomingRequests);
+        // Update nav badge
+        CURRENT_USER = await getCurrentUser(true);
+        // Force badge refresh
+        updateNavAuth();
       }
     }
 
@@ -770,6 +822,24 @@
         if (btn) {
           activeFriend = btn.getAttribute('data-open-chat');
           await loadConversation(activeFriend);
+        }
+      });
+    }
+
+    if (incomingList) {
+      incomingList.addEventListener('click', async (e) => {
+        const acceptBtn = e.target.closest('button[data-accept-request]');
+        const declineBtn = e.target.closest('button[data-decline-request]');
+        if (acceptBtn) {
+          const id = acceptBtn.getAttribute('data-accept-request');
+          const { data } = await api(`/friends/accept/${id}`, { method: 'POST' });
+          if (data?.success) { showSuccess('Friend request accepted'); loadFriends(); }
+          else { showError(data?.error || 'Failed to accept'); }
+        } else if (declineBtn) {
+          const id = declineBtn.getAttribute('data-decline-request');
+          const { data } = await api(`/friends/decline/${id}`, { method: 'POST' });
+          if (data?.success) { showInfo('Request declined'); loadFriends(); }
+          else { showError(data?.error || 'Failed to decline'); }
         }
       });
     }
