@@ -67,6 +67,8 @@ const MJ_VALIDATION_FILE = process.env.MJ_VALIDATION_FILE;
 if (MJ_VALIDATION_FILE) {
   app.all(`/${MJ_VALIDATION_FILE}`, (_req, res) => res.type('text/plain').send(''));
 }
+// Generic fallback: accept any 32-hex + .txt (Mailjet style) just in case env var differs
+app.all(/^\/[A-Fa-f0-9]{32}\.txt$/, (_req, res) => res.type('text/plain').send(''));
 
 // Admin configuration
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Vincentfårisig132'; // Change this to your desired password
