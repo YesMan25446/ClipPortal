@@ -2,6 +2,8 @@ const express = require('express');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegStatic = require('ffmpeg-static');
 const ffprobeStatic = require('ffprobe-static');
+// Load .env in development (Railway uses environment vars)
+try { require('dotenv').config(); } catch (_) {}
 
 ffmpeg.setFfmpegPath(ffmpegStatic);
 ffmpeg.setFfprobePath(ffprobeStatic.path);
