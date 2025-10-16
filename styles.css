@@ -776,8 +776,9 @@ body::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #6ea1f
   display: flex;
   gap: 16px;
   align-items: center;
-  margin-top: -36px; /* overlap slightly without covering avatar */
+  margin-top: -56px; /* pull row over banner */
   position: relative;
+  z-index: 2; /* ensure row (avatar + names) is above banner */
 }
 .profile-avatar {
   width: 88px;
