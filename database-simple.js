@@ -59,6 +59,14 @@ function restoreFromEnvironment() {
       fs.writeJsonSync(usersFile, backupData);
       console.log('✅ Restored user data from environment backup');
     }
+    
+    // Also restore clips data if available
+    if (process.env.CLIPS_DATA_BACKUP) {
+      const clipsBackupData = JSON.parse(Buffer.from(process.env.CLIPS_DATA_BACKUP, 'base64').toString());
+      const clipsFile = path.join(__dirname, 'data', 'clips.json');
+      fs.writeJsonSync(clipsFile, clipsBackupData);
+      console.log('✅ Restored clips data from environment backup');
+    }
   } catch (error) {
     console.warn('⚠️  Failed to restore from environment backup:', error.message);
   }
@@ -67,6 +75,7 @@ function restoreFromEnvironment() {
 // Backup critical data to environment (for small datasets)
 function backupToEnvironment() {
   try {
+    // Backup user data
     if (fs.existsSync(usersFile)) {
       const userData = fs.readJsonSync(usersFile);
       // Only backup if we have users and it's not too large (< 8KB to stay within env var limits)
@@ -76,6 +85,21 @@ function backupToEnvironment() {
           const encoded = Buffer.from(backupStr).toString('base64');
           // Log to console as a backup mechanism (can be set as env var)
           console.log(`📦 User data backup (set as USER_DATA_BACKUP env var): ${encoded}`);
+        }
+      }
+    }
+    
+    // Backup clips data
+    const clipsFile = path.join(__dirname, 'data', 'clips.json');
+    if (fs.existsSync(clipsFile)) {
+      const clipsData = fs.readJsonSync(clipsFile);
+      if (clipsData.clips && clipsData.clips.length > 0) {
+        const clipsBackupStr = JSON.stringify(clipsData);
+        if (clipsBackupStr.length < 8192) {
+          const clipsEncoded = Buffer.from(clipsBackupStr).toString('base64');
+          console.log(`🎥 Clips data backup (set as CLIPS_DATA_BACKUP env var): ${clipsEncoded}`);
+        } else {
+          console.log('📦 Clips data too large for environment backup (> 8KB)');
         }
       }
     }
@@ -354,5 +378,6 @@ const dbManager = new SimpleDatabaseManager();
 module.exports = {
   db: dbManager,
   encrypt,
-  decrypt
+  decrypt,
+  backupToEnvironment
 };

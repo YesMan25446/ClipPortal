@@ -323,6 +323,13 @@ function readData() {
 function writeData(data) {
   try {
     fs.writeJsonSync(dataFile, data, { spaces: 2 });
+    // Trigger backup after writing clips data
+    setTimeout(() => {
+      try {
+        const { backupToEnvironment } = require('./database-simple');
+        if (backupToEnvironment) backupToEnvironment();
+      } catch (e) { /* ignore if backup fails */ }
+    }, 100);
     return true;
   } catch (error) {
     console.error('Error writing data file:', error);
