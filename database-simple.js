@@ -276,8 +276,15 @@ class SimpleDatabaseManager {
     const friends = this.readFriends();
     const users = this.readUsers();
     const pendings = friends.relations.filter(r => r.friend_id === userId && r.status === 'pending');
-    const requesterIds = pendings.map(r => r.user_id);
-    return users.users.filter(u => requesterIds.includes(u.id)).map(u => ({ id: u.id, username: u.username }));
+    const requesterIdsFromFriends = new Set(pendings.map(r => r.user_id));
+
+    // Fallback: also check legacy user field incomingRequests (if present)
+    const u = users.users.find(x => x.id === userId) || {};
+    const legacyIncoming = Array.isArray(u.incomingRequests) ? u.incomingRequests : [];
+    for (const rid of legacyIncoming) requesterIdsFromFriends.add(rid);
+
+    const ids = Array.from(requesterIdsFromFriends);
+    return users.users.filter(u => ids.includes(u.id)).map(u => ({ id: u.id, username: u.username }));
   }
 
   sendFriendRequest(userId, friendId) {
@@ -300,6 +307,22 @@ class SimpleDatabaseManager {
       accepted_at: null
     });
     this.writeFriends(friends);
+
+    // Also update legacy fields in users for compatibility/UI
+    const users = this.readUsers();
+    const senderIdx = users.users.findIndex(u => u.id === userId);
+    const targetIdx = users.users.findIndex(u => u.id === friendId);
+    if (senderIdx !== -1) {
+      const arr = Array.isArray(users.users[senderIdx].outgoingRequests) ? users.users[senderIdx].outgoingRequests : [];
+      if (!arr.includes(friendId)) arr.push(friendId);
+      users.users[senderIdx].outgoingRequests = arr;
+    }
+    if (targetIdx !== -1) {
+      const arr = Array.isArray(users.users[targetIdx].incomingRequests) ? users.users[targetIdx].incomingRequests : [];
+      if (!arr.includes(userId)) arr.push(userId);
+      users.users[targetIdx].incomingRequests = arr;
+    }
+    this.writeUsers(users);
     return true;
   }
 
@@ -311,6 +334,24 @@ class SimpleDatabaseManager {
     friends.relations[idx].status = 'accepted';
     friends.relations[idx].accepted_at = new Date().toISOString();
     this.writeFriends(friends);
+
+    // Cleanup legacy arrays
+    const users = this.readUsers();
+    const recipIdx = users.users.findIndex(u => u.id === userId);
+    const reqIdx = users.users.findIndex(u => u.id === friendId);
+    if (recipIdx !== -1) {
+      users.users[recipIdx].incomingRequests = (users.users[recipIdx].incomingRequests || []).filter(id => id !== friendId);
+      const friendsArr = new Set(users.users[recipIdx].friends || []);
+      friendsArr.add(friendId);
+      users.users[recipIdx].friends = Array.from(friendsArr);
+    }
+    if (reqIdx !== -1) {
+      users.users[reqIdx].outgoingRequests = (users.users[reqIdx].outgoingRequests || []).filter(id => id !== userId);
+      const friendsArr = new Set(users.users[reqIdx].friends || []);
+      friendsArr.add(userId);
+      users.users[reqIdx].friends = Array.from(friendsArr);
+    }
+    this.writeUsers(users);
     return true;
   }
 
@@ -321,6 +362,17 @@ class SimpleDatabaseManager {
     friends.relations = friends.relations.filter(r => !(r.user_id === friendId && r.friend_id === userId && r.status === 'pending'));
     const changed = friends.relations.length !== before;
     if (changed) this.writeFriends(friends);
+
+    const users = this.readUsers();
+    const recipIdx = users.users.findIndex(u => u.id === userId);
+    const reqIdx = users.users.findIndex(u => u.id === friendId);
+    if (recipIdx !== -1) {
+      users.users[recipIdx].incomingRequests = (users.users[recipIdx].incomingRequests || []).filter(id => id !== friendId);
+    }
+    if (reqIdx !== -1) {
+      users.users[reqIdx].outgoingRequests = (users.users[reqIdx].outgoingRequests || []).filter(id => id !== userId);
+    }
+    this.writeUsers(users);
     return changed;
   }
 
