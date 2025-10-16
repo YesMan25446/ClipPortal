@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Account - Clip Portal</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -25,7 +26,8 @@
     </header>
 
     <main class="container">
-      <section class="card">
+      <!-- Sign Up Section (hidden when logged in) -->
+      <section class="card" id="signupSection">
         <h2>Sign Up</h2>
         <form id="signupForm">
           <div class="grid">
@@ -45,14 +47,15 @@
               <small class="error" data-for="su_password"></small>
             </div>
           </div>
-          <p class="muted">After signing up, you’ll receive a verification email. You must verify before logging in.</p>
+          <p class="muted">After signing up, you'll receive a magic link to verify and sign in automatically.</p>
           <div class="actions">
             <button type="submit" class="btn primary">Create Account</button>
           </div>
         </form>
       </section>
 
-      <section class="card">
+      <!-- Login Section (hidden when logged in) -->
+      <section class="card" id="loginSection">
         <h2>Log In</h2>
         <form id="loginUserForm">
           <div class="grid">
@@ -67,11 +70,46 @@
           </div>
           <div class="actions">
             <button type="submit" class="btn secondary">Log In</button>
-            <button type="button" id="logoutButton" class="btn">Log Out</button>
             <button type="button" id="resendVerifyBtn" class="btn">Resend Verification</button>
           </div>
         </form>
         <p class="muted">After logging in, you can rate clips, add friends, and send messages.</p>
+        
+        <div class="divider" style="margin: 30px 0; text-align: center; position: relative;">
+          <span style="background: var(--bg-color, #0a0e1a); padding: 0 20px; color: #666;">OR</span>
+        </div>
+        
+        <!-- Magic Link Login Form -->
+        <form id="magicLinkForm">
+          <div class="grid">
+            <div class="field span-2">
+              <label for="magic_email">Request Magic Link (Passwordless)</label>
+              <input id="magic_email" name="email" type="email" placeholder="Enter your email" required />
+              <small class="muted">We'll send you a magic link to sign in without a password.</small>
+            </div>
+          </div>
+          <div class="actions">
+            <button type="submit" class="btn" style="background: #28a745;">Send Magic Link</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- User Info Section (visible when logged in) -->
+      <section class="card" id="userInfoSection" style="display: none;">
+        <h2>Account Information</h2>
+        <div class="grid">
+          <div class="field">
+            <label>Username</label>
+            <div id="currentUsername" class="info-display">Loading...</div>
+          </div>
+          <div class="field">
+            <label>Account Status</label>
+            <div id="accountStatus" class="info-display">Loading...</div>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="button" id="logoutButton" class="btn danger">Log Out</button>
+        </div>
       </section>
 
       <section class="card">

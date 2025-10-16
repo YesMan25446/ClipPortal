@@ -794,10 +794,43 @@
   // Auth page functionality
   function initAuthPage() {
     const signupForm = document.getElementById('signupForm');
-    const signupSection = signupForm ? signupForm.closest('.card') : null;
+    const signupSection = document.getElementById('signupSection');
     const loginUserForm = document.getElementById('loginUserForm');
+    const loginSection = document.getElementById('loginSection');
+    const userInfoSection = document.getElementById('userInfoSection');
+    const magicLinkForm = document.getElementById('magicLinkForm');
     const logoutButton = document.getElementById('logoutButton');
     const resendVerifyBtn = document.getElementById('resendVerifyBtn');
+    const currentUsername = document.getElementById('currentUsername');
+    const accountStatus = document.getElementById('accountStatus');
+
+    // Update UI based on authentication state
+    async function updateAuthUI() {
+      const me = await getCurrentUser(true);
+      
+      if (me) {
+        // User is logged in - show user info, hide login/signup
+        if (signupSection) signupSection.style.display = 'none';
+        if (loginSection) loginSection.style.display = 'none';
+        if (userInfoSection) userInfoSection.style.display = 'block';
+        
+        // Update user info
+        if (currentUsername) currentUsername.textContent = me.username;
+        if (accountStatus) {
+          const verifiedText = me.isVerified ? '✓ Verified' : '⚠ Not Verified';
+          const adminText = me.isAdmin ? ' (Admin)' : '';
+          accountStatus.innerHTML = `${verifiedText}${adminText}`;
+        }
+      } else {
+        // User is not logged in - show login/signup, hide user info
+        if (signupSection) signupSection.style.display = 'block';
+        if (loginSection) loginSection.style.display = 'block';
+        if (userInfoSection) userInfoSection.style.display = 'none';
+      }
+    }
+
+    // Call on page load
+    updateAuthUI();
 
     if (signupForm) {
       signupForm.addEventListener('submit', async (e) => {
@@ -811,7 +844,8 @@
           body: JSON.stringify({ username, email, password })
         });
         if (data?.success) {
-          showSuccess('Account created! Check your email to verify before logging in.');
+          showSuccess('Account created! Check your email for a magic link to verify and sign in.');
+          signupForm.reset();
         } else {
           showError(data?.error || 'Sign up failed');
         }
@@ -831,7 +865,7 @@
         if (data?.success) {
           CURRENT_USER = data.user;
           showSuccess('Logged in!');
-          setTimeout(() => window.location.href = 'index.html', 600);
+          updateAuthUI();
         } else {
           if (data?.needsVerification) {
             showError('Please verify your email before logging in.');
@@ -842,21 +876,33 @@
       });
     }
 
+    // Magic link form
+    if (magicLinkForm) {
+      magicLinkForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('magic_email').value.trim();
+        const { data } = await api('/auth/request-magic-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, redirectTo: '/account.html' })
+        });
+        if (data?.success) {
+          showSuccess(data.message);
+          magicLinkForm.reset();
+        } else {
+          showError(data?.error || 'Failed to send magic link');
+        }
+      });
+    }
+
     if (logoutButton) {
       logoutButton.addEventListener('click', async () => {
         await api('/auth/logout', { method: 'POST' });
         CURRENT_USER = null;
-        if (signupSection) signupSection.style.display = '';
         showInfo('Logged out');
-        setTimeout(() => window.location.href = 'index.html', 600);
+        updateAuthUI();
       });
     }
-
-    // Hide signup when logged in
-    (async () => {
-      const me = await getCurrentUser(true);
-      if (me && signupSection) signupSection.style.display = 'none';
-    })();
 
     if (resendVerifyBtn) {
       resendVerifyBtn.addEventListener('click', async () => {
@@ -866,8 +912,8 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ usernameOrEmail: username })
         });
-        if (data?.success) showSuccess('Verification email sent.');
-        else showError(data?.error || 'Could not send verification email');
+        if (data?.success) showSuccess('Verification magic link sent.');
+        else showError(data?.error || 'Could not send verification magic link');
       });
     }
 

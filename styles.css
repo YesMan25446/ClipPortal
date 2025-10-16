@@ -111,6 +111,39 @@ body.modal-open { overflow: hidden; }
   letter-spacing: 1px;
 }
 
+/* Authentication UI */
+.info-display {
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.divider {
+  position: relative;
+  text-align: center;
+  margin: 30px 0;
+}
+
+.divider::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border);
+}
+
+.divider span {
+  background: var(--bg);
+  padding: 0 20px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 /* Filters */
 .filters {
   display: flex;
