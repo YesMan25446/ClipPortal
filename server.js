@@ -62,6 +62,12 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 // Persistent storage root (Railway volume if attached)
 const STORAGE_ROOT = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, 'data');
 
+// Mailjet domain validation helper (for Railway subdomains without DNS access)
+const MJ_VALIDATION_FILE = process.env.MJ_VALIDATION_FILE;
+if (MJ_VALIDATION_FILE) {
+  app.all(`/${MJ_VALIDATION_FILE}`, (_req, res) => res.type('text/plain').send(''));
+}
+
 // Admin configuration
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Vincentfårisig132'; // Change this to your desired password
 
@@ -447,9 +453,9 @@ app.post('/api/auth/register', async (req, res) => {
       username,
       email: emailLower,
       passwordHash,
-      isVerified: true, // Skip email verification for easier setup
-      verifyToken: null,
-      verifyTokenExpires: null,
+      isVerified: false,
+      verifyToken: verifyToken,
+      verifyTokenExpires: new Date(Date.now() + 24*3600*1000).toISOString(),
       isAdmin: isFirstUser
     };
     
@@ -1088,16 +1094,17 @@ app.get('/api/auth/verify', (req, res) => {
   try {
     const token = (req.query.token || '').trim();
     if (!token) return res.status(400).json({ success: false, error: 'Missing token' });
-    const users = readUsers();
-    const idx = users.users.findIndex(u => u.verifyToken === token);
-    if (idx === -1) return res.status(400).json({ success: false, error: 'Invalid or expired token' });
-    const u = users.users[idx];
-    const exp = u.verifyTokenExpires ? new Date(u.verifyTokenExpires).getTime() : 0;
+
+    // Find user by verification token (supports both legacy and new field names)
+    const all = db.getAllUsers(10000);
+    const u = all.find(x => (x.verify_token === token) || (x.verifyToken === token));
+    if (!u) return res.status(400).json({ success: false, error: 'Invalid or expired token' });
+
+    const expStr = u.verify_token_expires || u.verifyTokenExpires;
+    const exp = expStr ? new Date(expStr).getTime() : 0;
     if (!exp || exp < Date.now()) return res.status(400).json({ success: false, error: 'Token expired' });
-    u.isVerified = true;
-    u.verifyToken = null;
-    u.verifyTokenExpires = null;
-    writeUsers(users);
+
+    db.updateUser(u.id, { is_verified: true, verify_token: null, verify_token_expires: null });
     res.json({ success: true, message: 'Email verified. You can now log in.' });
   } catch (e) {
     console.error('verify error', e);
@@ -1108,15 +1115,18 @@ app.get('/api/auth/verify', (req, res) => {
 app.post('/api/auth/resend-verification', async (req, res) => {
   try {
     const { usernameOrEmail } = req.body || {};
-    const users = readUsers();
-    const match = (usernameOrEmail || '').toLowerCase();
-    const u = users.users.find(x => x.username.toLowerCase() === match || (x.email || '').toLowerCase() === match);
+    const match = String(usernameOrEmail || '').toLowerCase();
+    
+    // Try username first, then email
+    let u = db.getUserByUsername(match);
+    if (!u && isValidEmail(match)) u = db.getUserByEmail(match);
     if (!u) return res.status(404).json({ success: false, error: 'Account not found' });
-    if (u.isVerified) return res.json({ success: true, message: 'Already verified' });
-    u.verifyToken = uuidv4();
-    u.verifyTokenExpires = new Date(Date.now() + 24*3600*1000).toISOString();
-    writeUsers(users);
-    await sendVerificationEmail({ to: decryptEmail(u.email), username: u.username, token: u.verifyToken });
+    if (u.is_verified) return res.json({ success: true, message: 'Already verified' });
+    
+    const token = uuidv4();
+    const expires = new Date(Date.now() + 24*3600*1000).toISOString();
+    db.updateUser(u.id, { verify_token: token, verify_token_expires: expires });
+    await sendVerificationEmail({ to: u.email, username: u.username, token });
     res.json({ success: true, message: 'Verification email sent' });
   } catch (e) {
     console.error('resend error', e);
