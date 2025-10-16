@@ -70,8 +70,16 @@
   let __prevPendingClips = null;
 
   // Soft notification sounds (Web Audio, very low volume)
+  const SOUND_KEY = 'cp_sound_enabled';
+  function isSoundEnabled() {
+    try { return localStorage.getItem(SOUND_KEY) !== '0'; } catch (_) { return true; }
+  }
+  function setSoundEnabled(v) {
+    try { localStorage.setItem(SOUND_KEY, v ? '1' : '0'); } catch (_) {}
+  }
   let __audioCtx = null;
   function ensureAudio() {
+    if (!isSoundEnabled()) return null;
     try {
       if (!__audioCtx) {
         const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -83,6 +91,7 @@
     } catch (_) { return null; }
   }
   function beep({ frequency = 660, duration = 120, volume = 0.15, type = 'sine' } = {}) {
+    if (!isSoundEnabled()) return;
     const ctx = ensureAudio();
     if (!ctx) return;
     const o = ctx.createOscillator();
@@ -96,6 +105,7 @@
     o.stop(now + duration / 1000);
   }
   function playNotification(kind) {
+    if (!isSoundEnabled()) return;
     // keep sounds subtle
     switch (kind) {
       case 'message':
@@ -855,6 +865,17 @@
         });
         if (data?.success) showSuccess('Verification email sent.');
         else showError(data?.error || 'Could not send verification email');
+      });
+    }
+
+    // Preferences: sound alerts toggle
+    const soundToggle = document.getElementById('soundToggle');
+    if (soundToggle) {
+      try { soundToggle.checked = isSoundEnabled(); } catch (_) {}
+      soundToggle.addEventListener('change', () => {
+        setSoundEnabled(!!soundToggle.checked);
+        showInfo(soundToggle.checked ? 'Sound alerts enabled' : 'Sound alerts disabled');
+        // if enabling, ensure audio is ready on next interaction
       });
     }
   }
