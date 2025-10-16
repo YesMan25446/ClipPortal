@@ -784,7 +784,7 @@ body::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #6ea1f
   width: 88px;
   height: 88px;
   border-radius: 50%;
-  background: rgba(255,255,255,0.1);
+  background: var(--bg); /* default avatar matches site background */
   background-size: cover;
   background-position: center;
   position: relative;
