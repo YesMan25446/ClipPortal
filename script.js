@@ -183,7 +183,10 @@
         }
 
         // Toasts when counts increase
-        if (__prevUnreadMsgs !== null && unread > __prevUnreadMsgs) {
+        if (__prevUnreadMsgs === null && unread > 0) {
+          // First check and there are already unread messages
+          showInfo('You have unread messages');
+        } else if (__prevUnreadMsgs !== null && unread > __prevUnreadMsgs) {
           showInfo(`New message${unread-__prevUnreadMsgs>1?'s':''} received`);
           playNotification('message');
         }
@@ -1436,7 +1439,9 @@
       const wrapper = document.createElement('span');
       wrapper.className = 'nav-dropdown';
       wrapper.style.position = 'relative';
-      wrapper.style.display = 'inline-block';
+      wrapper.style.display = 'inline-flex';
+      wrapper.style.alignItems = 'center';
+      wrapper.style.verticalAlign = 'middle';
       link.parentNode.insertBefore(wrapper, link);
       wrapper.appendChild(link);
       const menu = document.createElement('div');
@@ -1479,11 +1484,11 @@
     initLandingPage();
   }
 
-  // Auto-refresh nav badges and notifications every 20s
+  // Auto-refresh nav badges and notifications every 10s
   if (!window.__navBadgePoll) {
     window.__navBadgePoll = setInterval(() => {
       updateNavAuth();
-    }, 20000);
+    }, 10000);
     window.addEventListener('beforeunload', () => {
       try { clearInterval(window.__navBadgePoll); } catch (_) {}
       window.__navBadgePoll = null;
