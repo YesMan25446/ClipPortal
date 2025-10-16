@@ -88,8 +88,12 @@ app.use(express.static('.')); // Serve static files from current directory
 // Ensure uploads and thumbnails directories exist (persisted)
 const uploadsDir = path.join(STORAGE_ROOT, 'uploads');
 const thumbnailsDir = path.join(STORAGE_ROOT, 'thumbnails');
+const avatarsDir = path.join(STORAGE_ROOT, 'profile', 'avatars');
+const bannersDir = path.join(STORAGE_ROOT, 'profile', 'banners');
 fs.ensureDirSync(uploadsDir);
 fs.ensureDirSync(thumbnailsDir);
+fs.ensureDirSync(avatarsDir);
+fs.ensureDirSync(bannersDir);
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -114,6 +118,27 @@ const upload = multer({
     } else {
       cb(new Error('Only video files are allowed'), false);
     }
+  }
+});
+
+// Image uploaders for profile (avatars, banners)
+const imageStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const target = (req._imageTarget === 'banner') ? bannersDir : avatarsDir;
+    cb(null, target);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.png';
+    const uniqueName = `${uuidv4()}${ext}`;
+    cb(null, uniqueName);
+  }
+});
+const imageUpload = multer({
+  storage: imageStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype && file.mimetype.startsWith('image/')) return cb(null, true);
+    cb(new Error('Only image files are allowed'), false);
   }
 });
 
@@ -190,11 +215,19 @@ function writeComments(data) {
 function getUserPublic(u) {
   // Convert database user format to public format
   const friends = u.friends || db.getFriends(u.id).map(f => f.id);
+  const profile = u.profile || {};
   return { 
     id: u.id, 
     username: u.username, 
     friends: friends, 
-    createdAt: u.created_at || u.createdAt 
+    createdAt: u.created_at || u.createdAt,
+    profile: {
+      displayName: profile.displayName || u.username,
+      bio: profile.bio || '',
+      themeColor: profile.themeColor || '#6ea1ff',
+      avatar: profile.avatar || null,
+      banner: profile.banner || null
+    }
   };
 }
 
@@ -692,6 +725,94 @@ app.post('/api/friends/decline/:id', authRequired, (req, res) => {
   } catch (error) {
     console.error('Friend decline error:', error);
     res.status(500).json({ success: false, error: 'Failed to decline friend request' });
+  }
+});
+
+// Profile routes
+// Get public profile by username (with approved clips)
+app.get('/api/profile/:username', async (req, res) => {
+  try {
+    const username = String(req.params.username || '').trim();
+    if (!username) return res.status(400).json({ success: false, error: 'Username required' });
+    const user = db.getUserByUsername(username);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    const data = readData();
+    const clips = (data.clips || [])
+      .filter(c => c.submittedBy === user.id && (c.status || 'pending') === 'approved')
+      .sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return res.json({ success: true, user: getUserPublic(user), clips });
+  } catch (e) {
+    console.error('profile get error', e);
+    return res.status(500).json({ success: false, error: 'Failed to load profile' });
+  }
+});
+
+// Get my profile (with my clips incl. pending)
+app.get('/api/me/profile', authRequired, (req, res) => {
+  try {
+    const me = db.getUserById(req.userId);
+    if (!me) return res.status(404).json({ success: false, error: 'User not found' });
+    const data = readData();
+    const myClips = (data.clips || [])
+      .filter(c => c.submittedBy === me.id)
+      .sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const userPublic = getUserPublic(me);
+    // include editable profile details exactly as stored
+    userPublic.profile = me.profile || userPublic.profile || {};
+    return res.json({ success: true, user: userPublic, clips: myClips });
+  } catch (e) {
+    console.error('me profile error', e);
+    return res.status(500).json({ success: false, error: 'Failed to load profile' });
+  }
+});
+
+// Update my profile (displayName, bio, themeColor)
+app.post('/api/me/profile', authRequired, (req, res) => {
+  try {
+    const { displayName, bio, themeColor } = req.body || {};
+    const me = db.getUserById(req.userId);
+    if (!me) return res.status(404).json({ success: false, error: 'User not found' });
+    const nextProfile = { ...(me.profile || {}) };
+    if (typeof displayName === 'string') nextProfile.displayName = displayName.slice(0, 60);
+    if (typeof bio === 'string') nextProfile.bio = bio.slice(0, 500);
+    if (typeof themeColor === 'string') nextProfile.themeColor = themeColor.slice(0, 20);
+    const updated = db.updateUser(me.id, { profile: nextProfile });
+    return res.json({ success: true, user: getUserPublic(updated) });
+  } catch (e) {
+    console.error('update profile error', e);
+    return res.status(500).json({ success: false, error: 'Failed to update profile' });
+  }
+});
+
+// Upload avatar
+app.post('/api/me/profile/avatar', authRequired, (req, res, next) => { req._imageTarget = 'avatar'; next(); }, imageUpload.single('avatar'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+    const me = db.getUserById(req.userId);
+    if (!me) return res.status(404).json({ success: false, error: 'User not found' });
+    const rel = `/profile/avatars/${req.file.filename}`;
+    const profile = { ...(me.profile || {}), avatar: rel };
+    db.updateUser(me.id, { profile });
+    return res.json({ success: true, url: rel });
+  } catch (e) {
+    console.error('avatar upload error', e);
+    return res.status(500).json({ success: false, error: 'Failed to upload avatar' });
+  }
+});
+
+// Upload banner
+app.post('/api/me/profile/banner', authRequired, (req, res, next) => { req._imageTarget = 'banner'; next(); }, imageUpload.single('banner'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+    const me = db.getUserById(req.userId);
+    if (!me) return res.status(404).json({ success: false, error: 'User not found' });
+    const rel = `/profile/banners/${req.file.filename}`;
+    const profile = { ...(me.profile || {}), banner: rel };
+    db.updateUser(me.id, { profile });
+    return res.json({ success: true, url: rel });
+  } catch (e) {
+    console.error('banner upload error', e);
+    return res.status(500).json({ success: false, error: 'Failed to upload banner' });
   }
 });
 
@@ -1543,6 +1664,8 @@ if (clip.thumbnail && clip.thumbnail.startsWith('/thumbnails/')) {
 // Serve uploaded files and thumbnails
 app.use('/uploads', express.static(uploadsDir));
 app.use('/thumbnails', express.static(thumbnailsDir));
+app.use('/profile/avatars', express.static(avatarsDir));
+app.use('/profile/banners', express.static(bannersDir));
 
 // Error handling middleware
 app.use((error, req, res, next) => {

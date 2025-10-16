@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Profile - Clip Portal</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <h1 class="logo">Clip Portal</h1>
+        <nav class="nav">
+          <a href="index.html">Watch</a>
+          <a href="submit.html">Submit</a>
+          <a href="about.html">About</a>
+          <a href="messages.html">Messages</a>
+          <a href="profile.html" class="active">Profile</a>
+          <a href="account.html">Account</a>
+          <a href="admin.html" class="admin-link">Admin</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="card" id="profileHeader"></section>
+
+      <section class="card" id="profileEditor">
+        <h2>Edit Profile</h2>
+        <form id="profileEditForm" style="display:none;">
+          <div class="grid">
+            <div class="field">
+              <label for="pf_displayName">Display Name</label>
+              <input type="text" id="pf_displayName" maxlength="60" />
+            </div>
+            <div class="field">
+              <label for="pf_themeColor">Theme Color</label>
+              <input type="color" id="pf_themeColor" value="#6ea1ff" />
+            </div>
+            <div class="field span-2">
+              <label for="pf_bio">Bio</label>
+              <textarea id="pf_bio" rows="3" maxlength="500" placeholder="Tell people about you..."></textarea>
+            </div>
+            <div class="field">
+              <label for="pf_avatar">Avatar</label>
+              <input type="file" id="pf_avatar" accept="image/*" />
+              <small class="hint">PNG/JPG up to 5MB</small>
+            </div>
+            <div class="field">
+              <label for="pf_banner">Banner</label>
+              <input type="file" id="pf_banner" accept="image/*" />
+              <small class="hint">PNG/JPG up to 5MB</small>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn primary" id="pf_save" type="submit">Save Changes</button>
+          </div>
+        </form>
+        <p class="muted">Tip: Share your profile by sending a link like <code>profile.html?u=USERNAME</code>.</p>
+      </section>
+
+      <section class="card">
+        <h2>Clips</h2>
+        <div class="clips-grid" id="profileClips"></div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <small>© <span id="year"></span> Clip Portal</small>
+      </div>
+    </footer>
+
+    <script src="./script.js?v=11" defer></script>
+  </body>
+</html>

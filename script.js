@@ -929,6 +929,128 @@
     }
   }
 
+  // Profile page functionality
+  function initProfilePage() {
+    const params = new URLSearchParams(window.location.search);
+    const usernameParam = params.get('u');
+    const header = document.getElementById('profileHeader');
+    const clipsGrid = document.getElementById('profileClips');
+    const editForm = document.getElementById('profileEditForm');
+    const displayNameInput = document.getElementById('pf_displayName');
+    const bioInput = document.getElementById('pf_bio');
+    const colorInput = document.getElementById('pf_themeColor');
+    const avatarInput = document.getElementById('pf_avatar');
+    const bannerInput = document.getElementById('pf_banner');
+    const saveBtn = document.getElementById('pf_save');
+
+    async function load() {
+      try {
+        let res;
+        let me = null;
+        if (usernameParam) {
+          res = await api(`/profile/${encodeURIComponent(usernameParam)}`);
+          me = await getCurrentUser();
+        } else {
+          const my = await api('/me/profile');
+          res = my;
+          me = res.data?.user || null;
+        }
+        const data = res.data;
+        if (!data?.success) { showError(data?.error || 'Failed to load profile'); return; }
+        const user = data.user;
+        const clips = data.clips || [];
+
+        // Render header
+        if (header) {
+          const p = user.profile || {};
+          header.innerHTML = `
+            <div class="profile-banner" style="${p.banner ? `background-image:url('${p.banner}')` : `background:${p.themeColor || '#222'}`}"></div>
+            <div class="profile-row">
+              <div class="profile-avatar" style="${p.avatar ? `background-image:url('${p.avatar}')` : ''}"></div>
+              <div class="profile-meta">
+                <h2>${escapeHtml(p.displayName || user.username)}</h2>
+                <div class="muted">@${escapeHtml(user.username)}</div>
+                ${p.bio ? `<p class="profile-bio">${escapeHtml(p.bio)}</p>` : ''}
+              </div>
+            </div>`;
+        }
+
+        // Render clips
+        if (clipsGrid) {
+          clipsGrid.innerHTML = clips.map(clip => `
+            <div class="clip-card" data-id="${clip.id}">
+              <div class="clip-thumbnail" onclick="openVideoModal('${clip.id}')">
+                <div class="play-button"><svg class="play-icon" width="22" height="22" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"></path></svg></div>
+                <img src="${clip.thumbnail || '/images/video-placeholder.svg'}" alt="${escapeHtml(clip.title)}" onerror="this.onerror=null;this.src='/images/video-placeholder.svg';" />
+                <div class="clip-duration">${clip.duration || '0:00'}</div>
+              </div>
+              <div class="clip-info">
+                <h3 class="clip-title">${escapeHtml(clip.title)}</h3>
+                <div class="clip-meta">
+                  <span class="clip-category">${escapeHtml(clip.category || 'Other')}</span>
+                  <span class="clip-date">${formatDate(clip.createdAt)}</span>
+                </div>
+              </div>
+            </div>`).join('');
+        }
+
+        // Show edit UI only if it's my profile (no username param)
+        if (!usernameParam && editForm) {
+          const p = (data.user && data.user.profile) || {};
+          if (displayNameInput) displayNameInput.value = p.displayName || data.user.username || '';
+          if (bioInput) bioInput.value = p.bio || '';
+          if (colorInput) colorInput.value = p.themeColor || '#6ea1ff';
+          editForm.style.display = '';
+        } else if (editForm) {
+          editForm.style.display = 'none';
+        }
+      } catch (e) {
+        showError('Failed to load profile');
+      }
+    }
+
+    if (saveBtn && editForm) {
+      editForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const displayName = displayNameInput.value.trim();
+        const bio = bioInput.value.trim();
+        const themeColor = colorInput.value;
+        const { data } = await api('/me/profile', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ displayName, bio, themeColor })
+        });
+        if (data?.success) { showSuccess('Profile updated'); load(); }
+        else { showError(data?.error || 'Failed to update'); }
+      });
+    }
+
+    if (avatarInput) {
+      avatarInput.addEventListener('change', async () => {
+        if (!avatarInput.files?.length) return;
+        const fd = new FormData();
+        fd.append('avatar', avatarInput.files[0]);
+        const res = await fetch(`${API_BASE}/me/profile/avatar`, { method: 'POST', body: fd, credentials: 'include' });
+        const data = await res.json();
+        if (data?.success) { showSuccess('Avatar updated'); load(); }
+        else { showError(data?.error || 'Failed to upload avatar'); }
+      });
+    }
+
+    if (bannerInput) {
+      bannerInput.addEventListener('change', async () => {
+        if (!bannerInput.files?.length) return;
+        const fd = new FormData();
+        fd.append('banner', bannerInput.files[0]);
+        const res = await fetch(`${API_BASE}/me/profile/banner`, { method: 'POST', body: fd, credentials: 'include' });
+        const data = await res.json();
+        if (data?.success) { showSuccess('Banner updated'); load(); }
+        else { showError(data?.error || 'Failed to upload banner'); }
+      });
+    }
+
+    load();
+  }
+
   // Messages page functionality
   function initMessagesPage() {
     const friendList = document.getElementById('friendList');
@@ -1089,6 +1211,7 @@
             <div class="recent-clip">
               <div class="recent-info">
                 <h4>${escapeHtml(u.username)}</h4>
+                <a class="btn" href="profile.html?u=${encodeURIComponent(u.username)}" style="margin-top:6px;">View Profile</a>
               </div>
               <div class="actions"><button class="btn" data-add-friend="${u.id}">Add Friend</button></div>
             </div>`).join('');
@@ -1578,6 +1701,8 @@
     initMessagesPage();
   } else if (window.location.pathname.includes('requests.html') || window.location.pathname.endsWith('requests.html')) {
     initRequestsPage();
+  } else if (window.location.pathname.includes('profile.html') || window.location.pathname.endsWith('profile.html')) {
+    initProfilePage();
   } else {
     initLandingPage();
   }
