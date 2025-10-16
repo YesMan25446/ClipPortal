@@ -640,6 +640,17 @@ app.post('/api/friends/decline/:id', authRequired, (req, res) => {
 });
 
 // Admin routes
+// Pending clips count for notifications
+app.get('/api/admin/pending-count', adminRequired, (req, res) => {
+  try {
+    const data = readData();
+    const count = (data.clips || []).filter(c => (c.status || 'pending') === 'pending').length;
+    res.json({ success: true, pending: count });
+  } catch (e) {
+    res.json({ success: true, pending: 0 });
+  }
+});
+
 app.get('/api/admin/users', adminRequired, (req, res) => {
   const q = (req.query.q || '').toLowerCase().trim();
   const users = readUsers();
@@ -727,14 +738,44 @@ app.post('/api/messages/:toId', authRequired, (req, res) => {
   res.json({ success: true, message: msg });
 });
 
+// Unread messages count for current user
+app.get('/api/messages/unread-count', authRequired, (req, res) => {
+  const data = readMessages();
+  const count = data.messages.filter(m => m.recipientId === req.userId && !m.read).length;
+  res.json({ success: true, unread: count });
+});
+
+// Mark messages from a specific user as read for the current user
+app.post('/api/messages/mark-read/:userId', authRequired, (req, res) => {
+  const otherId = req.params.userId;
+  const data = readMessages();
+  let changed = false;
+  for (const m of data.messages) {
+    if (m.senderId === otherId && m.recipientId === req.userId && !m.read) {
+      m.read = true;
+      changed = true;
+    }
+  }
+  if (changed) writeMessages(data);
+  res.json({ success: true, changed });
+});
+
 app.get('/api/messages/with/:userId', authRequired, (req, res) => {
   const otherId = req.params.userId;
   const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
+  const markRead = String(req.query.markRead || 'true').toLowerCase() !== 'false';
   const data = readMessages();
   const conv = data.messages
     .filter(m => (m.senderId === req.userId && m.recipientId === otherId) || (m.senderId === otherId && m.recipientId === req.userId))
     .sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt))
     .slice(-limit);
+  if (markRead) {
+    let changed = false;
+    for (const m of data.messages) {
+      if (m.senderId === otherId && m.recipientId === req.userId && !m.read) { m.read = true; changed = true; }
+    }
+    if (changed) writeMessages(data);
+  }
   res.json({ success: true, messages: conv });
 });
 

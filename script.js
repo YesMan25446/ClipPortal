@@ -64,32 +64,109 @@
   if (year) year.textContent = new Date().getFullYear();
 
   // Update nav visibility based on auth
+  // Previous counts for toasts
+  let __prevIncoming = null;
+  let __prevUnreadMsgs = null;
+  let __prevPendingClips = null;
+
   async function updateNavAuth() {
     const me = await getCurrentUser(true);
     const adminLink = document.querySelector('a[href="admin.html"]');
     if (adminLink) adminLink.style.display = (me && me.isAdmin) ? '' : 'none';
-    // Incoming friend requests badge on Messages link
+
+    // Messages link badges (friend requests + unread messages)
     const msgLink = document.querySelector('a[href="messages.html"]');
     if (msgLink) {
-      let badge = msgLink.querySelector('#navIncomingBadge');
-      const count = Number(me?.incomingRequests || 0);
-      if (count > 0) {
-        if (!badge) {
-          badge = document.createElement('span');
-          badge.id = 'navIncomingBadge';
-          badge.className = 'badge';
-          badge.style.marginLeft = '6px';
-          badge.style.background = '#ff6b6b';
-          badge.style.color = '#fff';
-          badge.style.padding = '2px 6px';
-          badge.style.borderRadius = '10px';
-          badge.style.fontSize = '12px';
-          msgLink.appendChild(badge);
+      // Friend request badge
+      let frBadge = msgLink.querySelector('#navIncomingBadge');
+      const incoming = Number(me?.incomingRequests || 0);
+      if (incoming > 0) {
+        if (!frBadge) {
+          frBadge = document.createElement('span');
+          frBadge.id = 'navIncomingBadge';
+          frBadge.className = 'badge';
+          frBadge.style.marginLeft = '6px';
+          frBadge.style.background = '#ff6b6b';
+          frBadge.style.color = '#fff';
+          frBadge.style.padding = '2px 6px';
+          frBadge.style.borderRadius = '10px';
+          frBadge.style.fontSize = '12px';
+          msgLink.appendChild(frBadge);
         }
-        badge.textContent = String(count);
-        badge.style.display = '';
-      } else if (badge) {
-        badge.style.display = 'none';
+        frBadge.textContent = String(incoming);
+        frBadge.style.display = '';
+      } else if (frBadge) {
+        frBadge.style.display = 'none';
+      }
+
+      // Unread messages badge
+      let msgBadge = msgLink.querySelector('#navMsgBadge');
+      try {
+        const { data: unreadRes } = await api('/messages/unread-count');
+        const unread = Number(unreadRes?.unread || 0);
+        if (unread > 0) {
+          if (!msgBadge) {
+            msgBadge = document.createElement('span');
+            msgBadge.id = 'navMsgBadge';
+            msgBadge.className = 'badge';
+            msgBadge.style.marginLeft = '6px';
+            msgBadge.style.background = '#6ea1ff';
+            msgBadge.style.color = '#fff';
+            msgBadge.style.padding = '2px 6px';
+            msgBadge.style.borderRadius = '10px';
+            msgBadge.style.fontSize = '12px';
+            msgLink.appendChild(msgBadge);
+          }
+          msgBadge.textContent = String(unread);
+          msgBadge.style.display = '';
+        } else if (msgBadge) {
+          msgBadge.style.display = 'none';
+        }
+
+        // Toasts when counts increase
+        if (__prevUnreadMsgs !== null && unread > __prevUnreadMsgs) {
+          showInfo(`New message${unread-__prevUnreadMsgs>1?'s':''} received`);
+        }
+        __prevUnreadMsgs = unread;
+      } catch (_) {}
+
+      if (__prevIncoming !== null && incoming > __prevIncoming) {
+        showInfo('New friend request received');
+      }
+      __prevIncoming = incoming;
+    }
+
+    // Admin pending clips badge on Admin link
+    if (me && me.isAdmin) {
+      const a = document.querySelector('a[href="admin.html"]');
+      if (a) {
+        let aBadge = a.querySelector('#navAdminBadge');
+        try {
+          const { data: pend } = await api('/api/admin/pending-count');
+          const pending = Number(pend?.pending || 0);
+          if (pending > 0) {
+            if (!aBadge) {
+              aBadge = document.createElement('span');
+              aBadge.id = 'navAdminBadge';
+              aBadge.className = 'badge';
+              aBadge.style.marginLeft = '6px';
+              aBadge.style.background = '#ffbf47';
+              aBadge.style.color = '#000';
+              aBadge.style.padding = '2px 6px';
+              aBadge.style.borderRadius = '10px';
+              aBadge.style.fontSize = '12px';
+              a.appendChild(aBadge);
+            }
+            aBadge.textContent = String(pending);
+            aBadge.style.display = '';
+          } else if (aBadge) {
+            aBadge.style.display = 'none';
+          }
+          if (__prevPendingClips !== null && pending > __prevPendingClips) {
+            showInfo('New clip submitted (pending approval)');
+          }
+          __prevPendingClips = pending;
+        } catch (_) {}
       }
     }
   }
@@ -822,6 +899,9 @@
         if (btn) {
           activeFriend = btn.getAttribute('data-open-chat');
           await loadConversation(activeFriend);
+          // Mark messages from this friend as read and refresh badges
+          try { await api(`/messages/mark-read/${activeFriend}`, { method: 'POST' }); } catch (_) {}
+          updateNavAuth();
         }
       });
     }
@@ -856,6 +936,7 @@
         if (data?.success) {
           messageInput.value = '';
           await loadConversation(activeFriend);
+          // No unread for me, but receiver will see count on next poll
         }
       });
     }
@@ -1240,10 +1321,14 @@
     initLandingPage();
   }
 
-  // Auto-refresh nav badge every 20s
+  // Auto-refresh nav badges and notifications every 20s
   if (!window.__navBadgePoll) {
     window.__navBadgePoll = setInterval(() => {
       updateNavAuth();
     }, 20000);
+    window.addEventListener('beforeunload', () => {
+      try { clearInterval(window.__navBadgePoll); } catch (_) {}
+      window.__navBadgePoll = null;
+    });
   }
 })();
