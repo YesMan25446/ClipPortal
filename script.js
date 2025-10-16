@@ -879,9 +879,19 @@
         const btn = e.target.closest('button[data-add-friend]');
         if (btn) {
           const id = btn.getAttribute('data-add-friend');
+          btn.disabled = true;
+          btn.textContent = 'Sending...';
           const { data } = await api(`/friends/request/${id}`, { method: 'POST' });
-          if (data?.success) { showSuccess('Friend request sent!'); }
-          else { showError(data?.error || 'Failed to send request'); }
+          if (data?.success) {
+            showSuccess('Friend request sent!');
+            btn.textContent = 'Requested';
+          } else {
+            showError(data?.error || 'Failed to send request');
+            btn.disabled = false;
+            btn.textContent = 'Add Friend';
+          }
+          // Refresh nav badge periodically anyway (no effect for sender, but harmless)
+          updateNavAuth();
         }
       });
     }
@@ -1217,5 +1227,12 @@
     initMessagesPage();
   } else {
     initLandingPage();
+  }
+
+  // Auto-refresh nav badge every 20s
+  if (!window.__navBadgePoll) {
+    window.__navBadgePoll = setInterval(() => {
+      updateNavAuth();
+    }, 20000);
   }
 })();
