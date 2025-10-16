@@ -59,6 +59,8 @@ function decryptEmail(encData) {
 })();
 
 const app = express();
+// Trust Railway/Proxy to properly set X-Forwarded-* so req.secure works
+try { app.set('trust proxy', 1); } catch (_) {}
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 // Persistent storage root (Railway volume if attached)
@@ -325,6 +327,17 @@ function optionalAuth(req) {
   }
 }
 
+function isSecureRequest(req) {
+  try {
+    if (req.secure) return true;
+    const xfproto = (req.headers['x-forwarded-proto'] || '').toString().toLowerCase();
+    if (xfproto.includes('https')) return true;
+    const base = process.env.SITE_BASE_URL || '';
+    if (base.startsWith('https://')) return true;
+  } catch (_) {}
+  return false;
+}
+
 function adminRequired(req, res, next) {
   try {
     // Ensure auth first
@@ -587,7 +600,7 @@ app.post('/api/auth/login', (req, res) => {
       req.headers['user-agent']
     );
     
-    res.cookie('auth', token, { httpOnly: true, sameSite: 'lax' });
+    res.cookie('auth', token, { httpOnly: true, sameSite: 'lax', secure: isSecureRequest(req) });
     res.json({ success: true, user: getUserPublic(user) });
   } catch (e) {
     console.error('login error', e);
@@ -1378,7 +1391,7 @@ app.get('/api/auth/magic-callback', (req, res) => {
     );
     
     // Set session cookie and redirect
-    res.cookie('auth', sessionToken, { httpOnly: true, sameSite: 'lax', secure: req.secure });
+    res.cookie('auth', sessionToken, { httpOnly: true, sameSite: 'lax', secure: isSecureRequest(req) });
     
     // Success page with redirect
     const message = tokenData.purpose === 'verify' ? 
