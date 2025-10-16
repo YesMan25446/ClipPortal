@@ -939,10 +939,13 @@
     const searchResults = document.getElementById('searchResults');
     const convo = document.getElementById('conversation');
     const convoHeader = document.getElementById('conversationHeader');
+    const convoTitle = document.getElementById('conversationTitle');
     const messageInput = document.getElementById('messageInput');
     const sendMessageBtn = document.getElementById('sendMessageBtn');
 
     let activeFriend = null;
+    let friendsCache = [];
+    let esStarted = false;
 
     async function ensureAuth() {
       const user = await getCurrentUser(true);
@@ -958,12 +961,12 @@
       if (!friendList) return;
       friendList.innerHTML = [
         ...friends.map(u => `
-          <div class="recent-clip">
-            <div class="recent-info">
-              <h4>${escapeHtml(u.username)}</h4>
-              <span class="recent-time">Friend</span>
-            </div>
-            <div class="actions"><button class="btn" data-open-chat="${u.id}">Open Chat</button></div>
+          <div class=\"recent-clip\">\r
+            <div class=\"recent-info\">\r
+              <h4>${escapeHtml(u.username)}</h4>\r
+              <span class=\"recent-time\">Friend</span>\r
+            </div>\r
+            <div class=\"actions\"><button class=\"btn\" data-open-chat=\"${u.id}\">Open Chat</button></div>\r
           </div>`)
       ].join('');
     }
@@ -994,10 +997,16 @@
       const ok = await ensureAuth(); if (!ok) return;
       const { data } = await api('/friends');
       if (data?.success) {
-        renderFriends(data.friends);
+        friendsCache = data.friends || [];
+        renderFriends(friendsCache);
         renderIncoming(data.incomingRequests);
         // Update nav badge
         CURRENT_USER = await getCurrentUser(true);
+        // Keep title accurate if a chat is open
+        if (activeFriend && convoTitle) {
+          const u = friendsCache.find(f => f.id === activeFriend);
+          convoTitle.textContent = u ? u.username : 'Conversation';
+        }
         // Force badge refresh
         updateNavAuth();
       }
@@ -1007,10 +1016,12 @@
       const { data } = await api(`/messages/with/${friendId}?limit=100`);
       if (data?.success) {
         convo.innerHTML = data.messages.map(m => `
-          <div style=\"margin:6px 0; ${m.senderId=== (CURRENT_USER && CURRENT_USER.id) ? 'text-align:right;' : ''}\">
+          <div style=\"margin:6px 0; ${m.senderId=== (CURRENT_USER && CURRENT_USER.id) ? 'text-align:right;' : ''}\">\r
             <span style=\"display:inline-block; background:${m.senderId=== (CURRENT_USER && CURRENT_USER.id) ? 'var(--accent)' : 'rgba(255,255,255,0.08)'}; color:white; padding:6px 10px; border-radius:12px;\">${escapeHtml(m.text)}</span>
           </div>`).join('');
-        convoHeader.textContent = 'Chat';
+        const u = friendsCache.find(f => f.id === friendId);
+        if (convoTitle) convoTitle.textContent = u ? u.username : 'Conversation';
+        if (convoHeader) convoHeader.textContent = '';
         convo.scrollTop = convo.scrollHeight;
       }
     }
@@ -1046,20 +1057,26 @@
       });
     }
 
+    async function sendMessage() {
+      const text = messageInput.value.trim();
+      if (!text || !activeFriend) return;
+      const { data } = await api(`/messages/${activeFriend}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      if (data?.success) {
+        messageInput.value = '';
+        // Conversation will also update via SSE; reload as fallback
+        await loadConversation(activeFriend);
+      }
+    }
     if (sendMessageBtn) {
-      sendMessageBtn.addEventListener('click', async () => {
-        const text = messageInput.value.trim();
-        if (!text || !activeFriend) return;
-        const { data } = await api(`/messages/${activeFriend}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text })
-        });
-        if (data?.success) {
-          messageInput.value = '';
-          await loadConversation(activeFriend);
-          // No unread for me, but receiver will see count on next poll
-        }
+      sendMessageBtn.addEventListener('click', sendMessage);
+    }
+    if (messageInput) {
+      messageInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); sendMessage(); }
       });
     }
 
@@ -1099,7 +1116,42 @@
       });
     }
 
+    async function startSse() {
+      if (esStarted) return; esStarted = true;
+      try {
+        const es = new EventSource(`${API_BASE}/messages/stream`);
+        es.onmessage = async (evt) => {
+          try {
+            const payload = JSON.parse(evt.data || '{}');
+            const msg = payload.message;
+            if (!msg) return;
+            const me = await getCurrentUser();
+            const otherId = msg.senderId === (me && me.id) ? msg.recipientId : msg.senderId;
+            if (activeFriend && otherId === activeFriend) {
+              // Append live to current conversation
+              const html = `<div style=\"margin:6px 0; ${msg.senderId=== (me && me.id) ? 'text-align:right;' : ''}\"><span style=\"display:inline-block; background:${msg.senderId=== (me && me.id) ? 'var(--accent)' : 'rgba(255,255,255,0.08)'}; color:white; padding:6px 10px; border-radius:12px;\">${escapeHtml(msg.text)}</span></div>`;
+              if (convo) {
+                convo.insertAdjacentHTML('beforeend', html);
+                convo.scrollTop = convo.scrollHeight;
+              }
+              // Mark as read if it's from the friend
+              if (msg.senderId !== (me && me.id)) {
+                try { await api(`/messages/mark-read/${otherId}`, { method: 'POST' }); } catch (_) {}
+                updateNavAuth();
+              }
+            } else {
+              // Not the open chat => update badges and optionally ping
+              updateNavAuth();
+              playNotification('message');
+            }
+          } catch (_) {}
+        };
+        window.addEventListener('beforeunload', () => { try { es.close(); } catch (_) {} });
+      } catch (_) { /* ignore */ }
+    }
+
     loadFriends();
+    startSse();
 
     // Auto-refresh friends and requests every 20s
     if (!window.__friendsPoll) {

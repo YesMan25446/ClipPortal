@@ -716,6 +716,14 @@ body.modal-open { overflow: hidden; }
   margin-top: 28px; 
 }
 
+/* Normalize hr to match dark theme */
+hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  opacity: 0.35;
+  margin: 12px 0;
+}
+
 /* Themed scrollbars */
 /* Firefox (global) */
 * { scrollbar-width: thin; scrollbar-color: var(--accent) rgba(255,255,255,0.08); }

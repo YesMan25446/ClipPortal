@@ -779,6 +779,17 @@ app.post('/api/clips/:id/comments', authRequired, (req, res) => {
   res.json({ success: true, comment: c });
 });
 
+// In-memory SSE stream registry for real-time messaging
+const messageStreams = new Map(); // userId -> Set<res>
+function sseSend(userId, event, payload) {
+  const set = messageStreams.get(userId);
+  if (!set) return;
+  const data = `event: ${event}\n` + `data: ${JSON.stringify(payload)}\n\n`;
+  for (const res of set) {
+    try { res.write(data); } catch (_) {}
+  }
+}
+
 // Messaging routes
 app.post('/api/messages/:toId', authRequired, (req, res) => {
   const toId = req.params.toId;
@@ -791,7 +802,32 @@ app.post('/api/messages/:toId', authRequired, (req, res) => {
   const msg = { id: uuidv4(), senderId: req.userId, recipientId: toId, text: text.trim(), createdAt: new Date().toISOString(), read: false };
   data.messages.push(msg);
   writeMessages(data);
+  // Push to both sender and recipient in real-time
+  sseSend(toId, 'message', { message: msg });
+  sseSend(req.userId, 'message', { message: msg });
   res.json({ success: true, message: msg });
+});
+
+// Server-Sent Events stream for real-time messages
+app.get('/api/messages/stream', authRequired, (req, res) => {
+  res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
+  res.flushHeaders && res.flushHeaders();
+  // Register connection
+  const uid = req.userId;
+  let set = messageStreams.get(uid);
+  if (!set) { set = new Set(); messageStreams.set(uid, set); }
+  set.add(res);
+  // Initial hello
+  try { res.write(': connected\n\n'); } catch (_) {}
+  // Keep-alive ping
+  const interval = setInterval(() => { try { res.write(': ping\n\n'); } catch (_) {} }, 25000);
+  // Cleanup on close
+  req.on('close', () => {
+    clearInterval(interval);
+    try { res.end(); } catch (_) {}
+    const s = messageStreams.get(uid);
+    if (s) { s.delete(res); if (!s.size) messageStreams.delete(uid); }
+  });
 });
 
 // Unread messages count for current user
