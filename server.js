@@ -610,6 +610,27 @@ app.post('/api/friends/accept/:id', authRequired, (req, res) => {
   }
 });
 
+app.post('/api/friends/decline/:id', authRequired, (req, res) => {
+  const requesterId = req.params.id;
+  const requester = db.getUserById(requesterId);
+  if (!requester) return res.status(404).json({ success: false, error: 'User not found' });
+  try {
+    const changed = db.declineFriendRequest(req.userId, requesterId);
+    if (!changed) return res.status(400).json({ success: false, error: 'No pending request to decline' });
+    db.logAction(
+      req.userId,
+      'FRIEND_REQUEST_DECLINED',
+      { requesterUserId: requesterId, requesterUsername: requester.username },
+      req.ip,
+      req.headers['user-agent']
+    );
+    res.json({ success: true, message: 'Friend request declined' });
+  } catch (error) {
+    console.error('Friend decline error:', error);
+    res.status(500).json({ success: false, error: 'Failed to decline friend request' });
+  }
+});
+
 // Admin routes
 app.get('/api/admin/users', adminRequired, (req, res) => {
   const q = (req.query.q || '').toLowerCase().trim();

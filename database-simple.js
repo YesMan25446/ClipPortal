@@ -23,6 +23,7 @@ const usersFile = path.join(dataDir, 'users-encrypted.json');
 const messagesFile = path.join(dataDir, 'messages.json');
 const commentsFile = path.join(dataDir, 'comments.json');
 const auditFile = path.join(dataDir, 'audit.json');
+const friendsFile = path.join(dataDir, 'friends.json');
 
 // Simple encryption/decryption
 function encrypt(text) {
@@ -124,6 +125,9 @@ function initializeFiles() {
   }
   if (!fs.existsSync(auditFile)) {
     fs.writeJsonSync(auditFile, { logs: [] });
+  }
+  if (!fs.existsSync(friendsFile)) {
+    fs.writeJsonSync(friendsFile, { relations: [] });
   }
 }
 
@@ -250,25 +254,68 @@ class SimpleDatabaseManager {
     });
   }
 
-  // Friend operations (simplified)
+// Friend operations (JSON-based)
   getFriends(userId) {
-    // Return empty array for now - can be implemented later
-    return [];
+    const friends = this.readFriends();
+    const users = this.readUsers();
+    const accepted = friends.relations.filter(r => (
+      (r.user_id === userId && r.status === 'accepted') ||
+      (r.friend_id === userId && r.status === 'accepted')
+    ));
+    const friendIds = accepted.map(r => r.user_id === userId ? r.friend_id : r.user_id);
+    return users.users.filter(u => friendIds.includes(u.id)).map(u => ({ id: u.id, username: u.username, created_at: u.created_at }));
   }
 
   getPendingFriendRequests(userId) {
-    // Return empty array for now
-    return [];
+    const friends = this.readFriends();
+    const users = this.readUsers();
+    const pendings = friends.relations.filter(r => r.friend_id === userId && r.status === 'pending');
+    const requesterIds = pendings.map(r => r.user_id);
+    return users.users.filter(u => requesterIds.includes(u.id)).map(u => ({ id: u.id, username: u.username }));
   }
 
   sendFriendRequest(userId, friendId) {
-    // Simple implementation - can be enhanced
+    const friends = this.readFriends();
+    // Prevent duplicates or existing accepted relations (either direction)
+    const exists = friends.relations.find(r => (
+      (r.user_id === userId && r.friend_id === friendId) ||
+      (r.user_id === friendId && r.friend_id === userId)
+    ));
+    if (exists) {
+      if (exists.status === 'pending') return true; // idempotent
+      if (exists.status === 'accepted') throw new Error('Already friends');
+    }
+    friends.relations.push({
+      id: uuidv4(),
+      user_id: userId,
+      friend_id: friendId,
+      status: 'pending',
+      requested_at: new Date().toISOString(),
+      accepted_at: null
+    });
+    this.writeFriends(friends);
     return true;
   }
 
   acceptFriendRequest(userId, friendId) {
-    // Simple implementation
+    // userId is the recipient, friendId is the requester
+    const friends = this.readFriends();
+    const idx = friends.relations.findIndex(r => r.user_id === friendId && r.friend_id === userId && r.status === 'pending');
+    if (idx === -1) throw new Error('No pending request');
+    friends.relations[idx].status = 'accepted';
+    friends.relations[idx].accepted_at = new Date().toISOString();
+    this.writeFriends(friends);
     return true;
+  }
+
+  declineFriendRequest(userId, friendId) {
+    // userId is the recipient, friendId is the requester
+    const friends = this.readFriends();
+    const before = friends.relations.length;
+    friends.relations = friends.relations.filter(r => !(r.user_id === friendId && r.friend_id === userId && r.status === 'pending'));
+    const changed = friends.relations.length !== before;
+    if (changed) this.writeFriends(friends);
+    return changed;
   }
 
   // Audit logging
@@ -316,6 +363,25 @@ class SimpleDatabaseManager {
       return true;
     } catch (error) {
       console.error('Error writing users:', error);
+      return false;
+    }
+  }
+
+  readFriends() {
+    try {
+      return fs.readJsonSync(friendsFile);
+    } catch (error) {
+      console.error('Error reading friends:', error);
+      return { relations: [] };
+    }
+  }
+
+  writeFriends(data) {
+    try {
+      fs.writeJsonSync(friendsFile, data, { spaces: 2 });
+      return true;
+    } catch (error) {
+      console.error('Error writing friends:', error);
       return false;
     }
   }
