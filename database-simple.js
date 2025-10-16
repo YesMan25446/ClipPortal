@@ -52,21 +52,27 @@ function decrypt(encryptedText) {
   }
 }
 
-// Restore data from environment backup if available
+// Restore data from environment backup if available (seed only when empty or forced)
 function restoreFromEnvironment() {
   try {
-    if (process.env.USER_DATA_BACKUP) {
+    const FORCE = process.env.FORCE_ENV_RESTORE === '1';
+    const usersExists = fs.existsSync(usersFile);
+    const usersEmpty = usersExists ? (fs.readJsonSync(usersFile).users || []).length === 0 : true;
+
+    if ((FORCE || !usersExists || usersEmpty) && process.env.USER_DATA_BACKUP) {
       const backupData = JSON.parse(Buffer.from(process.env.USER_DATA_BACKUP, 'base64').toString());
       fs.writeJsonSync(usersFile, backupData);
-      console.log('✅ Restored user data from environment backup');
+      console.log('✅ Seeded user data from environment backup');
     }
     
-    // Also restore clips data if available
-    if (process.env.CLIPS_DATA_BACKUP) {
+    // Also restore clips data if available (seed only if missing/empty or forced)
+    const clipsFile = path.join(dataDir, 'clips.json');
+    const clipsExists = fs.existsSync(clipsFile);
+    const clipsEmpty = clipsExists ? ((fs.readJsonSync(clipsFile).clips || []).length === 0) : true;
+    if ((FORCE || !clipsExists || clipsEmpty) && process.env.CLIPS_DATA_BACKUP) {
       const clipsBackupData = JSON.parse(Buffer.from(process.env.CLIPS_DATA_BACKUP, 'base64').toString());
-      const clipsFile = path.join(__dirname, 'data', 'clips.json');
       fs.writeJsonSync(clipsFile, clipsBackupData);
-      console.log('✅ Restored clips data from environment backup');
+      console.log('✅ Seeded clips data from environment backup');
     }
   } catch (error) {
     console.warn('⚠️  Failed to restore from environment backup:', error.message);
@@ -91,7 +97,7 @@ function backupToEnvironment() {
     }
     
     // Backup clips data
-    const clipsFile = path.join(__dirname, 'data', 'clips.json');
+    const clipsFile = path.join(dataDir, 'clips.json');
     if (fs.existsSync(clipsFile)) {
       const clipsData = fs.readJsonSync(clipsFile);
       if (clipsData.clips && clipsData.clips.length > 0) {
