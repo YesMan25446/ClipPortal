@@ -714,6 +714,34 @@ app.get('/health', (req, res) => {
   res.json({ success: true, status: 'ok', time: new Date().toISOString() });
 });
 
+// Fix missing thumbnails on restored clips
+function fixMissingThumbnails(clips) {
+  return clips.map(clip => {
+    // If thumbnail is a local file path that doesn't exist, fall back to placeholder or external thumbnail
+    if (clip.thumbnail && clip.thumbnail.startsWith('/thumbnails/')) {
+      const thumbnailPath = path.join(__dirname, clip.thumbnail);
+      if (!fs.existsSync(thumbnailPath)) {
+        // Try to get external thumbnail if URL is available
+        if (clip.url) {
+          const youtubeThumbnail = getYouTubeThumbnail(clip.url);
+          const twitchThumbnail = getTwitchThumbnail(clip.url);
+          if (youtubeThumbnail) {
+            clip.thumbnail = youtubeThumbnail;
+          } else if (twitchThumbnail) {
+            clip.thumbnail = '/images/twitch-placeholder.svg';
+          } else {
+            clip.thumbnail = '/images/video-placeholder.svg';
+          }
+        } else {
+          // No URL available, use generic placeholder
+          clip.thumbnail = '/images/video-placeholder.svg';
+        }
+      }
+    }
+    return clip;
+  });
+}
+
 // Get all clips with optional filtering and sorting
 app.get('/api/clips', (req, res) => {
   try {
@@ -727,6 +755,9 @@ app.get('/api/clips', (req, res) => {
 
     // Don't auto-approve clips without status - preserve them as they are
     let clips = data.clips.map(c => ({ ...c, status: c.status || 'pending' }));
+    
+    // Fix missing thumbnails for restored clips
+    clips = fixMissingThumbnails(clips);
 
     // Status filtering
     const statusParam = (req.query.status || '').toLowerCase();
@@ -782,11 +813,14 @@ app.get('/api/clips', (req, res) => {
 app.get('/api/clips/:id', (req, res) => {
   try {
     const data = readData();
-    const clip = data.clips.find(c => c.id === req.params.id);
+    let clip = data.clips.find(c => c.id === req.params.id);
     
     if (!clip) {
       return res.status(404).json({ success: false, error: 'Clip not found' });
     }
+
+    // Fix thumbnail if missing
+    clip = fixMissingThumbnails([clip])[0];
 
     // Access control: only admins can view pending clips
     const status = clip.status || 'pending';
@@ -860,11 +894,14 @@ app.post('/api/clips', upload.single('file'), async (req, res) => {
       
       if (youtubeThumbnail) {
         thumbnail = youtubeThumbnail;
+        console.log(`Using YouTube thumbnail: ${thumbnail}`);
       } else if (twitchThumbnail) {
         thumbnail = '/images/twitch-placeholder.svg';
+        console.log(`Using Twitch placeholder thumbnail`);
       } else {
         // For other URLs, use a generic placeholder
         thumbnail = '/images/video-placeholder.svg';
+        console.log(`Using generic placeholder for URL: ${url}`);
       }
     }
 
