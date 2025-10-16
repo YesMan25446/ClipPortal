@@ -769,21 +769,26 @@ body::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #6ea1f
   background-size: cover;
   background-position: center;
   border: 1px solid var(--border);
+  position: relative;
+  z-index: 1;
 }
 .profile-row {
   display: flex;
   gap: 16px;
   align-items: center;
-  margin-top: -40px;
+  margin-top: -36px; /* overlap slightly without covering avatar */
+  position: relative;
 }
 .profile-avatar {
-  width: 80px;
-  height: 80px;
+  width: 88px;
+  height: 88px;
   border-radius: 50%;
   background: rgba(255,255,255,0.1);
-  border: 3px solid var(--bg);
   background-size: cover;
   background-position: center;
+  position: relative;
+  z-index: 2; /* keep avatar above banner */
+  box-shadow: 0 0 0 4px var(--panel), 0 4px 12px rgba(0,0,0,0.35);
 }
 .profile-meta h2 { margin: 0; }
 .profile-bio { margin: 8px 0 0; color: var(--muted); }
