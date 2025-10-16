@@ -202,12 +202,43 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').toLowerCase());
 }
 
-async function sendVerificationEmail({ to, username, token }) {
+async function sendMagicLink({ to, username, token, purpose = 'verify', redirectTo = '/dashboard' }) {
   const baseUrl = process.env.SITE_BASE_URL || `http://localhost:${PORT}`;
-  const verifyUrl = `${baseUrl}/api/auth/verify?token=${encodeURIComponent(token)}`;
-  const subject = 'Verify your Clip Portal account';
-  const text = `Hi ${username || ''}\n\nPlease verify your email by clicking the link below:\n${verifyUrl}\n\nIf you did not sign up, you can ignore this email.`;
-  const html = `<p>Hi ${username || ''},</p><p>Please verify your email by clicking the link below:</p><p><a href="${verifyUrl}">${verifyUrl}</a></p><p>If you did not sign up, you can ignore this email.</p>`;
+  const magicUrl = `${baseUrl}/api/auth/magic-callback?token=${encodeURIComponent(token)}&redirect=${encodeURIComponent(redirectTo)}`;
+  
+  let subject, text, html;
+  
+  if (purpose === 'verify') {
+    subject = 'Verify your Clip Portal account';
+    text = `Hi ${username || ''},\n\nWelcome to Clip Portal! Click the link below to verify your email and access your account:\n\n${magicUrl}\n\nThis link will expire in 15 minutes.\n\nIf you did not sign up, you can ignore this email.`;
+    html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #333;">Welcome to Clip Portal!</h2>
+        <p>Hi ${username || ''},</p>
+        <p>Thanks for signing up! Click the button below to verify your email and access your account:</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${magicUrl}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">Verify Account & Sign In</a>
+        </div>
+        <p style="color: #666; font-size: 14px;">This link will expire in 15 minutes for security.</p>
+        <p style="color: #666; font-size: 14px;">If you did not sign up for Clip Portal, you can safely ignore this email.</p>
+      </div>
+    `;
+  } else if (purpose === 'login') {
+    subject = 'Sign in to Clip Portal';
+    text = `Hi ${username || ''},\n\nClick the link below to sign in to your Clip Portal account:\n\n${magicUrl}\n\nThis link will expire in 15 minutes.\n\nIf you did not request this, you can ignore this email.`;
+    html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #333;">Sign in to Clip Portal</h2>
+        <p>Hi ${username || ''},</p>
+        <p>Click the button below to sign in to your account:</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${magicUrl}" style="background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">Sign In</a>
+        </div>
+        <p style="color: #666; font-size: 14px;">This link will expire in 15 minutes for security.</p>
+        <p style="color: #666; font-size: 14px;">If you did not request this sign-in link, you can safely ignore this email.</p>
+      </div>
+    `;
+  }
 
   // Prefer SMTP if configured and nodemailer available
   const host = process.env.SMTP_HOST;
@@ -218,7 +249,7 @@ async function sendVerificationEmail({ to, username, token }) {
 
   try {
     if (nodemailer && host && user && pass) {
-      const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
+      const transporter = nodemailer.createTransporter({ host, port, secure: port === 465, auth: { user, pass } });
       await transporter.sendMail({ from, to, subject, text, html });
       return { sent: true };
     }
@@ -227,8 +258,13 @@ async function sendVerificationEmail({ to, username, token }) {
   }
 
   // Fallback: log link to server console
-  console.log(`Email verification required for ${to}. Verify via: ${verifyUrl}`);
+  console.log(`Magic link for ${to} (${purpose}): ${magicUrl}`);
   return { sent: false };
+}
+
+// Legacy function for backwards compatibility
+async function sendVerificationEmail({ to, username, token }) {
+  return sendMagicLink({ to, username, token, purpose: 'verify' });
 }
 
 function authRequired(req, res, next) {
@@ -451,7 +487,6 @@ app.post('/api/auth/register', async (req, res) => {
     
     const id = uuidv4();
     const passwordHash = bcrypt.hashSync(password, 10);
-    const verifyToken = uuidv4();
     
     // Check if this is the first user to make them admin
     const isFirstUser = db.getAllUsers().length === 0;
@@ -462,13 +497,14 @@ app.post('/api/auth/register', async (req, res) => {
       email: emailLower,
       passwordHash,
       isVerified: false,
-      verifyToken: verifyToken,
-      verifyTokenExpires: new Date(Date.now() + 24*3600*1000).toISOString(),
       isAdmin: isFirstUser
     };
     
     // Create user in encrypted database
     db.createUser(userData);
+    
+    // Create magic link token for verification (15 minutes)
+    const { rawToken } = db.createMagicToken(id, 'verify', 15);
     
     // Log the registration
     db.logAction(
@@ -479,10 +515,16 @@ app.post('/api/auth/register', async (req, res) => {
       req.headers['user-agent']
     );
 
-    // Send verification email (best-effort)
-    await sendVerificationEmail({ to: emailLower, username, token: verifyToken });
+    // Send magic link for verification
+    await sendMagicLink({ 
+      to: emailLower, 
+      username, 
+      token: rawToken, 
+      purpose: 'verify', 
+      redirectTo: '/dashboard' 
+    });
 
-    res.json({ success: true, message: 'Account created. Please check your email to verify your account.' });
+    res.json({ success: true, message: 'Account created! Please check your email for a magic link to verify and sign in.' });
   } catch (e) {
     console.error('register error', e);
     res.status(500).json({ success: false, error: 'Register failed' });
@@ -1097,7 +1139,100 @@ app.get('/api/stats', (req, res) => {
   }
 });
 
-// Email verification endpoints
+// Magic link callback endpoint
+app.get('/api/auth/magic-callback', (req, res) => {
+  try {
+    const rawToken = (req.query.token || '').trim();
+    const redirectTo = req.query.redirect || '/dashboard';
+    
+    if (!rawToken) {
+      return res.status(400).send(`
+        <html><body style="font-family: Arial, sans-serif; padding: 40px; text-align: center;">
+          <h2 style="color: #dc3545;">Invalid Link</h2>
+          <p>This magic link is missing required information. Please try requesting a new one.</p>
+          <a href="/" style="color: #007bff;">Return to Home</a>
+        </body></html>
+      `);
+    }
+
+    // Verify the magic token
+    const tokenData = db.verifyMagicToken(rawToken, 'verify') || db.verifyMagicToken(rawToken, 'login');
+    
+    if (!tokenData) {
+      return res.status(400).send(`
+        <html><body style="font-family: Arial, sans-serif; padding: 40px; text-align: center;">
+          <h2 style="color: #dc3545;">Link Expired or Invalid</h2>
+          <p>This magic link has expired or has already been used. Magic links are valid for 15 minutes.</p>
+          <p><a href="/api/auth/request-magic-link" style="color: #007bff;">Request a new magic link</a></p>
+          <a href="/" style="color: #007bff;">Return to Home</a>
+        </body></html>
+      `);
+    }
+
+    // Get the user
+    const user = db.getUserById(tokenData.userId);
+    if (!user) {
+      return res.status(404).send(`
+        <html><body style="font-family: Arial, sans-serif; padding: 40px; text-align: center;">
+          <h2 style="color: #dc3545;">User Not Found</h2>
+          <p>The user associated with this magic link could not be found.</p>
+          <a href="/" style="color: #007bff;">Return to Home</a>
+        </body></html>
+      `);
+    }
+
+    // If this is a verification token, mark user as verified
+    if (tokenData.purpose === 'verify' && !user.is_verified) {
+      db.updateUser(user.id, { is_verified: true });
+    }
+
+    // Create JWT session token
+    const sessionToken = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '30d' });
+    
+    // Log the successful authentication
+    db.logAction(
+      user.id,
+      tokenData.purpose === 'verify' ? 'USER_VERIFIED_VIA_MAGIC_LINK' : 'USER_LOGIN_VIA_MAGIC_LINK',
+      { purpose: tokenData.purpose },
+      req.ip,
+      req.headers['user-agent']
+    );
+    
+    // Set session cookie and redirect
+    res.cookie('auth', sessionToken, { httpOnly: true, sameSite: 'lax', secure: req.secure });
+    
+    // Success page with redirect
+    const message = tokenData.purpose === 'verify' ? 
+      'Email verified and signed in successfully!' : 
+      'Signed in successfully!';
+    
+    res.send(`
+      <html><body style="font-family: Arial, sans-serif; padding: 40px; text-align: center;">
+        <h2 style="color: #28a745;">✓ ${message}</h2>
+        <p>Welcome, ${user.username}!</p>
+        <p>Redirecting you to the app...</p>
+        <script>
+          setTimeout(() => {
+            window.location.href = '${redirectTo}';
+          }, 2000);
+        </script>
+        <a href="${redirectTo}" style="color: #007bff;">Click here if not redirected automatically</a>
+      </body></html>
+    `);
+    
+  } catch (e) {
+    console.error('Magic link callback error:', e);
+    res.status(500).send(`
+      <html><body style="font-family: Arial, sans-serif; padding: 40px; text-align: center;">
+        <h2 style="color: #dc3545;">Authentication Error</h2>
+        <p>Something went wrong while processing your magic link. Please try again.</p>
+        <a href="/" style="color: #007bff;">Return to Home</a>
+      </body></html>
+    `);
+  }
+});
+
+// Legacy email verification endpoint (for backwards compatibility)
 app.get('/api/auth/verify', (req, res) => {
   try {
     const token = (req.query.token || '').trim();
@@ -1120,10 +1255,147 @@ app.get('/api/auth/verify', (req, res) => {
   }
 });
 
+// Rate limiting for magic links (simple in-memory store)
+const rateLimitStore = new Map();
+
+function checkRateLimit(key, maxRequests = 5, windowMs = 15 * 60 * 1000) { // 5 requests per 15 minutes
+  const now = Date.now();
+  const windowStart = now - windowMs;
+  
+  if (!rateLimitStore.has(key)) {
+    rateLimitStore.set(key, []);
+  }
+  
+  const requests = rateLimitStore.get(key).filter(time => time > windowStart);
+  
+  if (requests.length >= maxRequests) {
+    return { allowed: false, resetTime: requests[0] + windowMs };
+  }
+  
+  requests.push(now);
+  rateLimitStore.set(key, requests);
+  
+  // Clean up old entries periodically
+  if (Math.random() < 0.1) { // 10% chance
+    for (const [k, times] of rateLimitStore.entries()) {
+      const validTimes = times.filter(time => time > windowStart);
+      if (validTimes.length === 0) {
+        rateLimitStore.delete(k);
+      } else {
+        rateLimitStore.set(k, validTimes);
+      }
+    }
+  }
+  
+  return { allowed: true };
+}
+
+// Magic link login endpoint
+app.post('/api/auth/request-magic-link', async (req, res) => {
+  try {
+    const { email, redirectTo = '/dashboard' } = req.body || {};
+    
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email is required' });
+    }
+    
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ success: false, error: 'Please enter a valid email address' });
+    }
+    
+    const emailLower = email.toLowerCase();
+    
+    // Rate limiting by IP and email
+    const ipKey = `magic_link_ip_${req.ip}`;
+    const emailKey = `magic_link_email_${emailLower}`;
+    
+    const ipLimit = checkRateLimit(ipKey, 10, 15 * 60 * 1000); // 10 per 15 minutes per IP
+    const emailLimit = checkRateLimit(emailKey, 3, 15 * 60 * 1000); // 3 per 15 minutes per email
+    
+    if (!ipLimit.allowed) {
+      const resetIn = Math.ceil((ipLimit.resetTime - Date.now()) / 60000);
+      return res.status(429).json({ 
+        success: false, 
+        error: `Too many requests from this IP. Try again in ${resetIn} minutes.` 
+      });
+    }
+    
+    if (!emailLimit.allowed) {
+      const resetIn = Math.ceil((emailLimit.resetTime - Date.now()) / 60000);
+      return res.status(429).json({ 
+        success: false, 
+        error: `Too many magic link requests for this email. Try again in ${resetIn} minutes.` 
+      });
+    }
+    
+    // Find user by email
+    const user = db.getUserByEmail(emailLower);
+    
+    // Always return success message for security (don't reveal if email exists)
+    if (!user) {
+      // Log the attempt but don't reveal the email doesn't exist
+      console.log(`Magic link requested for non-existent email: ${emailLower}`);
+      return res.json({ 
+        success: true, 
+        message: 'If an account exists with that email, you will receive a magic link shortly.' 
+      });
+    }
+    
+    if (!user.is_verified) {
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Account not verified. Please check your email for the verification link sent when you signed up.' 
+      });
+    }
+    
+    // Create magic link token for login (15 minutes)
+    const { rawToken } = db.createMagicToken(user.id, 'login', 15);
+    
+    // Log the request
+    db.logAction(
+      user.id,
+      'MAGIC_LINK_REQUESTED',
+      { purpose: 'login', email: emailLower },
+      req.ip,
+      req.headers['user-agent']
+    );
+    
+    // Send magic link
+    await sendMagicLink({ 
+      to: emailLower, 
+      username: user.username, 
+      token: rawToken, 
+      purpose: 'login',
+      redirectTo 
+    });
+    
+    res.json({ 
+      success: true, 
+      message: 'Magic link sent! Check your email and click the link to sign in.' 
+    });
+    
+  } catch (e) {
+    console.error('Magic link request error:', e);
+    res.status(500).json({ success: false, error: 'Failed to send magic link' });
+  }
+});
+
 app.post('/api/auth/resend-verification', async (req, res) => {
   try {
     const { usernameOrEmail } = req.body || {};
     const match = String(usernameOrEmail || '').toLowerCase();
+    
+    // Rate limiting
+    const key = `resend_${req.ip}_${match}`;
+    const rateLimit = checkRateLimit(key, 3, 15 * 60 * 1000); // 3 per 15 minutes
+    
+    if (!rateLimit.allowed) {
+      const resetIn = Math.ceil((rateLimit.resetTime - Date.now()) / 60000);
+      return res.status(429).json({ 
+        success: false, 
+        error: `Too many verification requests. Try again in ${resetIn} minutes.` 
+      });
+    }
     
     // Try username first, then email
     let u = db.getUserByUsername(match);
@@ -1131,14 +1403,21 @@ app.post('/api/auth/resend-verification', async (req, res) => {
     if (!u) return res.status(404).json({ success: false, error: 'Account not found' });
     if (u.is_verified) return res.json({ success: true, message: 'Already verified' });
     
-    const token = uuidv4();
-    const expires = new Date(Date.now() + 24*3600*1000).toISOString();
-    db.updateUser(u.id, { verify_token: token, verify_token_expires: expires });
-    await sendVerificationEmail({ to: u.email, username: u.username, token });
-    res.json({ success: true, message: 'Verification email sent' });
+    // Create magic link token for verification
+    const { rawToken } = db.createMagicToken(u.id, 'verify', 15);
+    
+    await sendMagicLink({ 
+      to: u.email, 
+      username: u.username, 
+      token: rawToken, 
+      purpose: 'verify', 
+      redirectTo: '/dashboard' 
+    });
+    
+    res.json({ success: true, message: 'Verification magic link sent' });
   } catch (e) {
     console.error('resend error', e);
-    res.status(500).json({ success: false, error: 'Failed to resend email' });
+    res.status(500).json({ success: false, error: 'Failed to resend verification' });
   }
 });
 

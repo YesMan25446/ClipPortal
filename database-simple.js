@@ -24,6 +24,7 @@ const messagesFile = path.join(dataDir, 'messages.json');
 const commentsFile = path.join(dataDir, 'comments.json');
 const auditFile = path.join(dataDir, 'audit.json');
 const friendsFile = path.join(dataDir, 'friends.json');
+const magicTokensFile = path.join(dataDir, 'magic-tokens.json');
 
 // Simple encryption/decryption
 function encrypt(text) {
@@ -134,6 +135,9 @@ function initializeFiles() {
   }
   if (!fs.existsSync(friendsFile)) {
     fs.writeJsonSync(friendsFile, { relations: [] });
+  }
+  if (!fs.existsSync(magicTokensFile)) {
+    fs.writeJsonSync(magicTokensFile, { tokens: [] });
   }
 }
 
@@ -376,6 +380,66 @@ class SimpleDatabaseManager {
     return changed;
   }
 
+  // Magic token operations (for magic links)
+  createMagicToken(userId, purpose = 'verify', expiresInMinutes = 15) {
+    const tokens = this.readMagicTokens();
+    const rawToken = crypto.randomBytes(32).toString('base64url');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + expiresInMinutes * 60 * 1000).toISOString();
+    
+    const tokenData = {
+      id: uuidv4(),
+      userId,
+      tokenHash,
+      purpose, // 'verify', 'login', 'reset'
+      expiresAt,
+      usedAt: null,
+      createdAt: new Date().toISOString()
+    };
+    
+    tokens.tokens.push(tokenData);
+    this.writeMagicTokens(tokens);
+    
+    // Clean up expired tokens periodically
+    this.cleanupExpiredTokens();
+    
+    return { rawToken, tokenData };
+  }
+  
+  verifyMagicToken(rawToken, purpose = 'verify') {
+    const tokens = this.readMagicTokens();
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    
+    const token = tokens.tokens.find(t => 
+      t.tokenHash === tokenHash && 
+      t.purpose === purpose && 
+      !t.usedAt &&
+      new Date(t.expiresAt) > new Date()
+    );
+    
+    if (!token) return null;
+    
+    // Mark as used
+    token.usedAt = new Date().toISOString();
+    this.writeMagicTokens(tokens);
+    
+    return token;
+  }
+  
+  cleanupExpiredTokens() {
+    const tokens = this.readMagicTokens();
+    const now = new Date();
+    const before = tokens.tokens.length;
+    
+    tokens.tokens = tokens.tokens.filter(t => 
+      new Date(t.expiresAt) > now && !t.usedAt
+    );
+    
+    if (tokens.tokens.length !== before) {
+      this.writeMagicTokens(tokens);
+    }
+  }
+
   // Audit logging
   logAction(userId, action, details, ipAddress, userAgent) {
     try {
@@ -457,6 +521,22 @@ class SimpleDatabaseManager {
       fs.writeJsonSync(auditFile, data, { spaces: 2 });
     } catch (error) {
       console.error('Error writing audit:', error);
+    }
+  }
+
+  readMagicTokens() {
+    try {
+      return fs.readJsonSync(magicTokensFile);
+    } catch (error) {
+      return { tokens: [] };
+    }
+  }
+
+  writeMagicTokens(data) {
+    try {
+      fs.writeJsonSync(magicTokensFile, data, { spaces: 2 });
+    } catch (error) {
+      console.error('Error writing magic tokens:', error);
     }
   }
 
