@@ -7,9 +7,16 @@ const { v4: uuidv4 } = require('uuid');
 // Simple encryption key (for deployment compatibility)
 const DB_KEY = process.env.DB_ENCRYPTION_KEY || 'clipportal-default-key-change-in-production';
 
-// Ensure data directory exists
-const dataDir = path.join(__dirname, 'data');
+// Ensure data directory exists - prefer persistent volume if available
+const dataDir = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, 'data');
 fs.ensureDirSync(dataDir);
+
+// Log where we're storing data
+if (process.env.RAILWAY_VOLUME_MOUNT_PATH) {
+  console.log(`🗄️  Using persistent volume for data: ${dataDir}`);
+} else {
+  console.log(`🗄️  Using local data directory: ${dataDir} (ephemeral - data will be lost on redeploy)`);
+}
 
 // Data files
 const usersFile = path.join(dataDir, 'users-encrypted.json');
@@ -44,8 +51,44 @@ function decrypt(encryptedText) {
   }
 }
 
+// Restore data from environment backup if available
+function restoreFromEnvironment() {
+  try {
+    if (process.env.USER_DATA_BACKUP) {
+      const backupData = JSON.parse(Buffer.from(process.env.USER_DATA_BACKUP, 'base64').toString());
+      fs.writeJsonSync(usersFile, backupData);
+      console.log('✅ Restored user data from environment backup');
+    }
+  } catch (error) {
+    console.warn('⚠️  Failed to restore from environment backup:', error.message);
+  }
+}
+
+// Backup critical data to environment (for small datasets)
+function backupToEnvironment() {
+  try {
+    if (fs.existsSync(usersFile)) {
+      const userData = fs.readJsonSync(usersFile);
+      // Only backup if we have users and it's not too large (< 8KB to stay within env var limits)
+      if (userData.users && userData.users.length > 0) {
+        const backupStr = JSON.stringify(userData);
+        if (backupStr.length < 8192) {
+          const encoded = Buffer.from(backupStr).toString('base64');
+          // Log to console as a backup mechanism (can be set as env var)
+          console.log(`📦 User data backup (set as USER_DATA_BACKUP env var): ${encoded}`);
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('⚠️  Failed to create environment backup:', error.message);
+  }
+}
+
 // Initialize files if they don't exist
 function initializeFiles() {
+  // First try to restore from environment backup
+  restoreFromEnvironment();
+  
   if (!fs.existsSync(usersFile)) {
     fs.writeJsonSync(usersFile, { users: [] });
   }
@@ -64,6 +107,9 @@ class SimpleDatabaseManager {
   constructor() {
     initializeFiles();
     console.log('✅ Simple database initialized successfully');
+    
+    // Show current backup on startup (helpful for setting env var)
+    setTimeout(() => backupToEnvironment(), 1000);
   }
 
   // User operations
@@ -241,6 +287,8 @@ class SimpleDatabaseManager {
   writeUsers(data) {
     try {
       fs.writeJsonSync(usersFile, data, { spaces: 2 });
+      // Create backup after writing user data
+      backupToEnvironment();
       return true;
     } catch (error) {
       console.error('Error writing users:', error);
