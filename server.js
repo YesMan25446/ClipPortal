@@ -282,7 +282,7 @@ async function sendMagicLink({ to, username, token, purpose = 'verify', redirect
 
   try {
     if (nodemailer && host && user && pass) {
-      const transporter = nodemailer.createTransporter({ host, port, secure: port === 465, auth: { user, pass } });
+      const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
       await transporter.sendMail({ from, to, subject, text, html });
       return { sent: true };
     }
