@@ -1088,7 +1088,10 @@
               <h4>${escapeHtml(u.username)}</h4>\r
               <span class=\"recent-time\">Friend</span>\r
             </div>\r
-            <div class=\"actions\"><button class=\"btn\" data-open-chat=\"${u.id}\">Open Chat</button></div>\r
+            <div class=\"actions\">
+              <a class=\"btn\" href=\"profile.html?u=${encodeURIComponent(u.username)}\">View Profile</a>
+              <button class=\"btn\" data-open-chat=\"${u.id}\" style=\"margin-left:6px;\">Open Chat</button>
+            </div>\r
           </div>`)
       ].join('');
     }
@@ -1108,7 +1111,8 @@
             <span class="recent-time">Request</span>
           </div>
           <div class="actions">
-            <button class="btn primary" data-accept-request="${u.id}">Accept</button>
+            <a class="btn" href="profile.html?u=${encodeURIComponent(u.username)}">View Profile</a>
+            <button class="btn primary" data-accept-request="${u.id}" style="margin-left:6px;">Accept</button>
             <button class="btn danger" data-decline-request="${u.id}" style="margin-left:6px;">Decline</button>
           </div>
         </div>
@@ -1211,9 +1215,11 @@
             <div class="recent-clip">
               <div class="recent-info">
                 <h4>${escapeHtml(u.username)}</h4>
-                <a class="btn" href="profile.html?u=${encodeURIComponent(u.username)}" style="margin-top:6px;">View Profile</a>
               </div>
-              <div class="actions"><button class="btn" data-add-friend="${u.id}">Add Friend</button></div>
+              <div class="actions">
+                <a class="btn" href="profile.html?u=${encodeURIComponent(u.username)}">View Profile</a>
+                <button class="btn" data-add-friend="${u.id}" style="margin-left:6px;">Add Friend</button>
+              </div>
             </div>`).join('');
         }
       });
@@ -1307,7 +1313,8 @@
               <h4>${escapeHtml(u.username)}</h4>
             </div>
             <div class="actions">
-              <button class="btn primary" data-accept-request="${u.id}">Accept</button>
+              <a class="btn" href="profile.html?u=${encodeURIComponent(u.username)}">View Profile</a>
+              <button class="btn primary" data-accept-request="${u.id}" style="margin-left:6px;">Accept</button>
               <button class="btn danger" data-decline-request="${u.id}" style="margin-left:6px;">Decline</button>
             </div>
           </div>
