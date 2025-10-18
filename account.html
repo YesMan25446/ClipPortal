@@ -108,7 +108,26 @@
             <div id="accountStatus" class="info-display">Loading...</div>
           </div>
         </div>
+        <div class="grid" id="socialLinksGrid">
+          <div class="field">
+            <label for="inputSteam">Steam</label>
+            <input id="inputSteam" type="text" placeholder="Paste your Steam link or username" />
+          </div>
+          <div class="field">
+            <label for="inputTwitter">Twitter</label>
+            <input id="inputTwitter" type="text" placeholder="@yourhandle or profile URL" />
+          </div>
+          <div class="field">
+            <label for="inputYouTube">YouTube</label>
+            <input id="inputYouTube" type="text" placeholder="Channel/user URL or ID" />
+          </div>
+          <div class="field">
+            <label for="inputOther">Other</label>
+            <input id="inputOther" type="text" placeholder="Other social URL (optional)" />
+          </div>
+        </div>
         <div class="actions">
+          <button type="button" id="saveSocialLinksBtn" class="btn primary">Save Social Links</button>
           <button type="button" id="logoutButton" class="btn danger">Log Out</button>
         </div>
       </section>
