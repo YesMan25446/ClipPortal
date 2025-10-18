@@ -230,7 +230,9 @@ function getUserPublic(u) {
       bio: profile.bio || '',
       themeColor: profile.themeColor || '#6ea1ff',
       avatar: profile.avatar || null,
-      banner: profile.banner || null
+      banner: profile.banner || null,
+      // Expose social links if present (public info)
+      social: profile.social || null
     }
   };
 }
@@ -784,13 +786,34 @@ app.get('/api/me/profile', authRequired, (req, res) => {
 // Update my profile (displayName, bio, themeColor)
 app.post('/api/me/profile', authRequired, (req, res) => {
   try {
-    const { displayName, bio, themeColor } = req.body || {};
+    const { displayName, bio, themeColor, social, steam, twitter, youtube, other } = req.body || {};
     const me = db.getUserById(req.userId);
     if (!me) return res.status(404).json({ success: false, error: 'User not found' });
     const nextProfile = { ...(me.profile || {}) };
     if (typeof displayName === 'string') nextProfile.displayName = displayName.slice(0, 60);
     if (typeof bio === 'string') nextProfile.bio = bio.slice(0, 500);
     if (typeof themeColor === 'string') nextProfile.themeColor = themeColor.slice(0, 20);
+
+    // Sanitize helper
+    const clean = (v) => {
+      if (typeof v !== 'string') return '';
+      const s = v.trim();
+      return s.slice(0, 200);
+    };
+
+    // Accept social links either as nested object or top-level fields for backwards compatibility
+    const socialPayload = typeof social === 'object' && social !== null ? social : { steam, twitter, youtube, other };
+    const allowedKeys = ['steam', 'twitter', 'youtube', 'other'];
+    const nextSocial = { ...(nextProfile.social || {}) };
+    for (const k of allowedKeys) {
+      if (socialPayload && Object.prototype.hasOwnProperty.call(socialPayload, k)) {
+        const val = clean(socialPayload[k]);
+        // Store empty as undefined to avoid clutter
+        if (val) nextSocial[k] = val; else delete nextSocial[k];
+      }
+    }
+    if (Object.keys(nextSocial).length) nextProfile.social = nextSocial; else delete nextProfile.social;
+
     const updated = db.updateUser(me.id, { profile: nextProfile });
     return res.json({ success: true, user: getUserPublic(updated) });
   } catch (e) {

@@ -803,6 +803,12 @@
     const resendVerifyBtn = document.getElementById('resendVerifyBtn');
     const currentUsername = document.getElementById('currentUsername');
     const accountStatus = document.getElementById('accountStatus');
+    // Social inputs
+    const inputSteam = document.getElementById('inputSteam');
+    const inputTwitter = document.getElementById('inputTwitter');
+    const inputYouTube = document.getElementById('inputYouTube');
+    const inputOther = document.getElementById('inputOther');
+    const saveSocialLinksBtn = document.getElementById('saveSocialLinksBtn');
 
     // Update UI based on authentication state
     async function updateAuthUI() {
@@ -821,6 +827,12 @@
           const adminText = me.isAdmin ? ' (Admin)' : '';
           accountStatus.innerHTML = `${verifiedText}${adminText}`;
         }
+        // Populate social inputs
+        const social = (me.profile && me.profile.social) || {};
+        if (inputSteam) inputSteam.value = social.steam || '';
+        if (inputTwitter) inputTwitter.value = social.twitter || '';
+        if (inputYouTube) inputYouTube.value = social.youtube || '';
+        if (inputOther) inputOther.value = social.other || '';
       } else {
         // User is not logged in - show login/signup, hide user info
         if (signupSection) signupSection.style.display = 'block';
@@ -917,6 +929,27 @@
       });
     }
 
+    // Save social links
+    if (saveSocialLinksBtn) {
+      saveSocialLinksBtn.addEventListener('click', async () => {
+        const payload = {
+          social: {
+            steam: (inputSteam?.value || '').trim(),
+            twitter: (inputTwitter?.value || '').trim(),
+            youtube: (inputYouTube?.value || '').trim(),
+            other: (inputOther?.value || '').trim()
+          }
+        };
+        const { data } = await api('/me/profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (data?.success) {
+          showSuccess('Social links saved');
+          getCurrentUser(true); // refresh cache
+        } else {
+          showError(data?.error || 'Failed to save social links');
+        }
+      });
+    }
+
     // Preferences: sound alerts toggle
     const soundToggle = document.getElementById('soundToggle');
     if (soundToggle) {
@@ -934,6 +967,42 @@
     const params = new URLSearchParams(window.location.search);
     const usernameParam = params.get('u');
     const header = document.getElementById('profileHeader');
+
+    function normalizeSocial(kind, value) {
+      const v = (value || '').trim();
+      if (!v) return '';
+      const isUrl = /^https?:\/\//i.test(v);
+      if (isUrl) return v;
+      switch (kind) {
+        case 'twitter':
+          return `https://twitter.com/${v.replace(/^@+/, '')}`;
+        case 'steam': {
+          const digitsOnly = /^[0-9]+$/.test(v);
+          return digitsOnly ? `https://steamcommunity.com/profiles/${v}` : `https://steamcommunity.com/id/${v}`;
+        }
+        case 'youtube': {
+          if (/^(UC|HC)[A-Za-z0-9_-]+$/.test(v)) return `https://youtube.com/channel/${v}`;
+          if (/^@/.test(v)) return `https://youtube.com/${v}`;
+          return `https://youtube.com/@${v}`;
+        }
+        default:
+          return `https://${v}`;
+      }
+    }
+
+    function socialsHtml(profile) {
+      const s = (profile && profile.social) || {};
+      const entries = [
+        s.steam ? { k: 'steam', href: normalizeSocial('steam', s.steam), label: 'Steam' } : null,
+        s.twitter ? { k: 'twitter', href: normalizeSocial('twitter', s.twitter), label: 'Twitter' } : null,
+        s.youtube ? { k: 'youtube', href: normalizeSocial('youtube', s.youtube), label: 'YouTube' } : null,
+        s.other ? { k: 'other', href: normalizeSocial('other', s.other), label: 'Link' } : null
+      ].filter(Boolean);
+      if (!entries.length) return '';
+      const aStyle = 'display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;text-decoration:none;background:rgba(255,255,255,0.06)';
+      const wrapStyle = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;';
+      return `<div class="profile-socials" style="${wrapStyle}">` + entries.map(e => `<a href="${e.href}" target="_blank" rel="noopener" style="${aStyle}">${e.label}</a>`).join('') + `</div>`;
+    }
     const clipsGrid = document.getElementById('profileClips');
     const editForm = document.getElementById('profileEditForm');
     const displayNameInput = document.getElementById('pf_displayName');
@@ -971,6 +1040,7 @@
                 <h2>${escapeHtml(p.displayName || user.username)}</h2>
                 <div class="muted">@${escapeHtml(user.username)}</div>
                 ${p.bio ? `<p class="profile-bio">${escapeHtml(p.bio)}</p>` : ''}
+                ${socialsHtml(p)}
               </div>
             </div>`;
         }
